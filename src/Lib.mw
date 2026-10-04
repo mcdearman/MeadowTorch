@@ -76,6 +76,9 @@ use Device.*
 -- An optimizer over a fixed set of parameters.
 @pub data Optimizer = Optimizer Ptr
 
+-- An open `.safetensors` file.
+@pub data Weights = Weights Ptr
+
 -- The open shim library, answered by `withLibrary`.
 @pub effect Torch { shim : () -> Library }
 
@@ -414,6 +417,10 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 
 @pub fun gelu (a : Tensor) = tensorCall "mt_gelu" [raw a]
 
+@pub fun sin (a : Tensor) = tensorCall "mt_sin" [raw a]
+
+@pub fun cos (a : Tensor) = tensorCall "mt_cos" [raw a]
+
 -- --- reductions ----------------------------------------------------------------
 
 @pub fun sum (a : Tensor) = tensorCall "mt_sum" [raw a]
@@ -461,6 +468,11 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 @pub fun crossEntropy (logits : Tensor) (target : Tensor) = tensorCall "mt_cross_entropy" [raw logits, raw target]
 
 @pub fun mseLoss (input : Tensor) (target : Tensor) = tensorCall "mt_mse_loss" [raw input, raw target]
+
+-- Scaled dot-product attention over the last two dimensions, (..., T, D). With
+-- `causal`, a position attends only to itself and earlier ones.
+@pub fun attention (causal : Bool) (query : Tensor) (key : Tensor) (value : Tensor) =
+  tensorCall "mt_attention" [raw query, raw key, raw value, flag causal]
 
 -- --- autograd ------------------------------------------------------------------
 
@@ -510,6 +522,31 @@ fun rawOptimizer (o : Optimizer) : Arg = match o with | Optimizer p -> Arg.PtrAr
 @pub fun zeroGrads (o : Optimizer) = unitCall "mt_optim_zero_grad" [rawOptimizer o]
 
 @pub fun freeOptimizer (o : Optimizer) = unitCall "mt_optim_free" [rawOptimizer o]
+
+-- --- weight files -------------------------------------------------------------
+--
+-- A `.safetensors` file, as Hugging Face publishes models. Opening one reads
+-- only its header; `weight` reads one tensor. Close it with `closeWeights`.
+
+fun rawWeights (w : Weights) : Arg = match w with | Weights p -> Arg.PtrArg p
+
+@pub fun openWeights (path : String) =
+  let p = ok (Ffi.callPtr (sym "mt_weights_open") [Arg.StringArg path]) in
+  if Ffi.isNull p then
+    let _ = check "openWeights" in
+    raise "openWeights: the shim answered no file"
+  else Weights p
+
+-- The name of every tensor in the file, in the file's order.
+@pub fun weightNames (w : Weights) =
+  let f = sym "mt_weights_name" in
+  V.map (\i -> ok (Ffi.callString f [rawWeights w, int i])) (V.range 0 (intCall "mt_weights_count" [rawWeights w]))
+
+-- The named tensor, on the CPU: `Float32` if it is stored as any float but
+-- `Float64`, and `Int64` if it is stored as any integer.
+@pub fun weight (w : Weights) (name : String) = tensorCall "mt_weights_get" [rawWeights w, Arg.StringArg name]
+
+@pub fun closeWeights (w : Weights) = unitCall "mt_weights_free" [rawWeights w]
 
 -- --- tests ---------------------------------------------------------------------
 --
@@ -632,3 +669,38 @@ fun fitLine makeOptimizer (steps : Int) =
       (device a == Mps, item (sum (add a a)), toFloats (add a a))
     else (True, 20.0, [2.0, 4.0, 6.0, 8.0])) in
   assertEq got (Ok (True, 20.0, [2.0, 4.0, 6.0, 8.0])) "on MPS, or skipped"
+
+@test fun attentionAveragesWhatItMaySee () =
+  let got = torch (\() ->
+    let q = zeros [1, 3, 2] in
+    let v = fromFloats [1, 3, 1] [3.0, 6.0, 9.0] in
+    (toFloats (attention True q q v), toFloats (attention False q q v), toFloats (cos (zeros [2])), toFloats (sin (zeros [2])))) in
+  assertEq got (Ok ([3.0, 4.5, 6.0], [6.0, 6.0, 6.0], [1.0, 1.0], [0.0, 0.0])) "causal, then not"
+
+@test fun weightsAreReadFromASafetensorsFile () =
+  let got = torch (\() ->
+    let w = openWeights "tests/tiny.safetensors" in
+    let m = weight w "layer.weight" in
+    let ids = weight w "ids" in
+    let missing = toResult (\() -> weight w "missing") in
+    let answer =
+      ( weightNames w
+        , (shape m, dtype m, toFloats m)
+        , (dtype ids, toInts ids)
+        , item (weight w "scale")
+        , match missing with | Err why -> S.contains "no tensor named missing" why | Ok _ -> False ) in
+      let _ = closeWeights w in
+      answer) in
+  assertEq
+    got
+    (Ok
+      ( ["layer.weight", "ids", "scale"]
+        , ([2, 2], Float32, [1.5, 0.0 -. 2.0, 0.25, 4.0])
+        , (Int64, [7, 0 - 8, 9])
+        , 3.5
+        , True ))
+    "names, a half-precision matrix as floats, integers, a scalar, and a missing name"
+
+@test fun aFileThatIsNotWeightsIsAnErr () =
+  let got = torch (\() -> openWeights "shim/build.sh") in
+  assertTrue (match got with | Err _ -> True | Ok _ -> False) "a shell script is not a safetensors file"

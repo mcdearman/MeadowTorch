@@ -4,9 +4,11 @@
 
 #include <atomic>
 #include <cstring>
+#include <fstream>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -18,6 +20,22 @@ struct mt_tensor_s {
 
 struct mt_optim_s {
   std::unique_ptr<torch::optim::Optimizer> o;
+};
+
+struct weight_entry {
+  std::string name;
+  std::string dtype;
+  std::vector<int64_t> shape;
+  uint64_t begin = 0;
+  uint64_t end = 0;
+};
+
+struct mt_weights_s {
+  std::string path;
+  // Where tensor data starts in the file: after the length and the header.
+  uint64_t data_start = 0;
+  std::vector<weight_entry> entries;
+  std::unordered_map<std::string, size_t> index;
 };
 
 namespace {
@@ -144,6 +162,132 @@ template <typename T> int64_t copy_out(mt_tensor t, T *out, int64_t cap, torch::
     std::memcpy(out, flat.data_ptr<T>(), static_cast<size_t>(n) * sizeof(T));
     return n;
   });
+}
+
+// Just enough JSON for a safetensors header: an object of
+// name -> {"dtype": string, "shape": [int], "data_offsets": [int, int]}.
+struct HeaderParser {
+  const std::string &s;
+  size_t i = 0;
+
+  [[noreturn]] void fail(const char *what) {
+    throw std::invalid_argument(std::string("bad safetensors header: ") + what + " at byte " + std::to_string(i));
+  }
+  void ws() {
+    while (i < s.size() && (s[i] == ' ' || s[i] == '\n' || s[i] == '\t' || s[i] == '\r')) i++;
+  }
+  char peek() {
+    ws();
+    if (i >= s.size()) fail("unexpected end");
+    return s[i];
+  }
+  void expect(char c) {
+    if (peek() != c) fail("unexpected character");
+    i++;
+  }
+  bool accept(char c) {
+    if (peek() != c) return false;
+    i++;
+    return true;
+  }
+  std::string string() {
+    expect('"');
+    std::string out;
+    while (true) {
+      if (i >= s.size()) fail("unterminated string");
+      char c = s[i++];
+      if (c == '"') return out;
+      if (c != '\\') {
+        out.push_back(c);
+        continue;
+      }
+      if (i >= s.size()) fail("unterminated escape");
+      char e = s[i++];
+      switch (e) {
+      case 'n': out.push_back('\n'); break;
+      case 't': out.push_back('\t'); break;
+      case 'r': out.push_back('\r'); break;
+      case 'b': out.push_back('\b'); break;
+      case 'f': out.push_back('\f'); break;
+      case 'u': fail("\\u escapes in names are not supported");
+      default: out.push_back(e);
+      }
+    }
+  }
+  int64_t integer() {
+    ws();
+    size_t start = i;
+    if (i < s.size() && s[i] == '-') i++;
+    while (i < s.size() && s[i] >= '0' && s[i] <= '9') i++;
+    if (start == i) fail("expected a number");
+    return std::stoll(s.substr(start, i - start));
+  }
+  std::vector<int64_t> integers() {
+    std::vector<int64_t> out;
+    expect('[');
+    if (accept(']')) return out;
+    do out.push_back(integer());
+    while (accept(','));
+    expect(']');
+    return out;
+  }
+  void skip_value() {
+    char c = peek();
+    if (c == '"') {
+      string();
+    } else if (c == '{') {
+      i++;
+      if (accept('}')) return;
+      do {
+        string();
+        expect(':');
+        skip_value();
+      } while (accept(','));
+      expect('}');
+    } else if (c == '[') {
+      i++;
+      if (accept(']')) return;
+      do skip_value();
+      while (accept(','));
+      expect(']');
+    } else {
+      while (i < s.size() && s[i] != ',' && s[i] != '}' && s[i] != ']') i++;
+    }
+  }
+  weight_entry entry(std::string name) {
+    weight_entry e;
+    e.name = std::move(name);
+    expect('{');
+    do {
+      std::string key = string();
+      expect(':');
+      if (key == "dtype") {
+        e.dtype = string();
+      } else if (key == "shape") {
+        e.shape = integers();
+      } else if (key == "data_offsets") {
+        auto offsets = integers();
+        if (offsets.size() != 2 || offsets[0] < 0 || offsets[1] < offsets[0]) fail("bad data_offsets");
+        e.begin = static_cast<uint64_t>(offsets[0]);
+        e.end = static_cast<uint64_t>(offsets[1]);
+      } else {
+        skip_value();
+      }
+    } while (accept(','));
+    expect('}');
+    return e;
+  }
+};
+
+torch::Dtype stored_dtype(const std::string &name) {
+  static const std::unordered_map<std::string, torch::Dtype> known = {
+      {"F16", torch::kFloat16}, {"BF16", torch::kBFloat16}, {"F32", torch::kFloat32}, {"F64", torch::kFloat64},
+      {"I8", torch::kInt8},     {"I16", torch::kInt16},     {"I32", torch::kInt32},   {"I64", torch::kInt64},
+      {"U8", torch::kUInt8},    {"BOOL", torch::kBool},
+  };
+  auto it = known.find(name);
+  if (it == known.end()) throw std::invalid_argument("unsupported safetensors dtype " + name);
+  return it->second;
 }
 
 } // namespace
@@ -379,6 +523,8 @@ MT_UNARY(mt_tanh, x.tanh())
 MT_UNARY(mt_sigmoid, x.sigmoid())
 MT_UNARY(mt_relu, x.relu())
 MT_UNARY(mt_gelu, torch::gelu(x))
+MT_UNARY(mt_sin, x.sin())
+MT_UNARY(mt_cos, x.cos())
 
 // --- reductions --------------------------------------------------------------
 
@@ -431,6 +577,12 @@ mt_tensor mt_cross_entropy(mt_tensor logits, mt_tensor target) {
 }
 mt_tensor mt_mse_loss(mt_tensor input, mt_tensor target) {
   return guard_tensor([&] { return torch::mse_loss(get(input), get(target)); });
+}
+
+mt_tensor mt_attention(mt_tensor query, mt_tensor key, mt_tensor value, int64_t causal) {
+  return guard_tensor([&] {
+    return torch::scaled_dot_product_attention(get(query), get(key), get(value), {}, 0.0, causal != 0);
+  });
 }
 
 // --- autograd ----------------------------------------------------------------
@@ -492,5 +644,67 @@ void mt_optim_zero_grad(mt_optim o) {
   });
 }
 void mt_optim_free(mt_optim o) { delete o; }
+
+// --- weight files ------------------------------------------------------------
+
+mt_weights mt_weights_open(const char *path) {
+  return guard<mt_weights>(nullptr, [&] {
+    if (path == nullptr) throw std::invalid_argument("null path");
+    std::ifstream file(path, std::ios::binary);
+    if (!file) throw std::invalid_argument(std::string("cannot open ") + path);
+    unsigned char raw[8];
+    file.read(reinterpret_cast<char *>(raw), 8);
+    if (!file) throw std::invalid_argument(std::string(path) + " is too short to be a safetensors file");
+    uint64_t header_len = 0;
+    for (int b = 7; b >= 0; b--) header_len = (header_len << 8) | raw[b];
+    if (header_len > (uint64_t{1} << 30)) throw std::invalid_argument(std::string(path) + " is not a safetensors file");
+    std::string header(static_cast<size_t>(header_len), '\0');
+    file.read(header.data(), static_cast<std::streamsize>(header_len));
+    if (!file) throw std::invalid_argument(std::string(path) + " ends inside its header");
+
+    auto w = std::make_unique<mt_weights_s>();
+    w->path = path;
+    w->data_start = 8 + header_len;
+    HeaderParser p{header};
+    p.expect('{');
+    if (!p.accept('}')) {
+      do {
+        std::string name = p.string();
+        p.expect(':');
+        if (name == "__metadata__") {
+          p.skip_value();
+        } else {
+          w->index[name] = w->entries.size();
+          w->entries.push_back(p.entry(name));
+        }
+      } while (p.accept(','));
+      p.expect('}');
+    }
+    return w.release();
+  });
+}
+int64_t mt_weights_count(mt_weights w) { return w ? static_cast<int64_t>(w->entries.size()) : 0; }
+const char *mt_weights_name(mt_weights w, int64_t i) {
+  if (w == nullptr || i < 0 || i >= static_cast<int64_t>(w->entries.size())) return nullptr;
+  return w->entries[static_cast<size_t>(i)].name.c_str();
+}
+mt_tensor mt_weights_get(mt_weights w, const char *name) {
+  return guard_tensor([&] {
+    if (w == nullptr || name == nullptr) throw std::invalid_argument("null weights handle or name");
+    auto found = w->index.find(name);
+    if (found == w->index.end()) throw std::invalid_argument(w->path + " has no tensor named " + name);
+    const weight_entry &e = w->entries[found->second];
+    torch::Tensor t = torch::empty(e.shape, stored_dtype(e.dtype));
+    uint64_t bytes = e.end - e.begin;
+    if (bytes != t.nbytes()) throw std::invalid_argument(std::string(name) + ": the data does not fit its shape");
+    std::ifstream file(w->path, std::ios::binary);
+    file.seekg(static_cast<std::streamoff>(w->data_start + e.begin));
+    file.read(static_cast<char *>(t.data_ptr()), static_cast<std::streamsize>(bytes));
+    if (!file) throw std::invalid_argument(w->path + " ends inside " + name);
+    if (t.is_floating_point()) return t.scalar_type() == torch::kFloat64 ? t : t.to(torch::kFloat32);
+    return t.scalar_type() == torch::kBool ? t : t.to(torch::kInt64);
+  });
+}
+void mt_weights_free(mt_weights w) { delete w; }
 
 } // extern "C"

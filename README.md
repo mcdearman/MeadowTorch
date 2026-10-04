@@ -24,7 +24,7 @@ Ok([2.0, 4.0, 6.0])
 
 - A Meadow with `Std.Ffi`. It is newer than the `0.1.0-alpha` release, so for
   now that means a build of Meadow from source.
-- libtorch 2.x: an unpacked libtorch download, or a Python install of `torch`.
+- libtorch 2.x. No Python is needed.
 - A C++20 compiler.
 - macOS or Linux. Tested on aarch64 macOS only.
 
@@ -39,14 +39,15 @@ shim/build.sh install       # builds, then copies to ~/.local/lib
 ```
 
 `build.sh` finds libtorch through `LIBTORCH` (a directory with `include/` and
-`lib/`), or else uses the `torch` that `$PYTHON` (default `python3`) imports.
-`PREFIX` changes where `install` copies to.
+`lib/`), or else in `~/.local/libtorch`. On aarch64 macOS it downloads libtorch
+there if it is missing; on Linux, download the build for your CUDA version from
+pytorch.org and set `LIBTORCH`. `PREFIX` replaces `~/.local` for both.
 
 Then depend on the package:
 
 ```toml
 [dependencies]
-Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.1.0" }
+Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.2.0" }
 
 [profile.debug]
 threads = 1
@@ -78,11 +79,12 @@ At run time `T.run` opens the first of: `$MEADOW_TORCH_LIB` if set; otherwise
 Creation (`zeros`, `ones`, `full`, `randn`, `rand`, `arange`, `scalar`,
 `fromFloats`, `fromInts`), inspection and reading back, device and dtype
 conversion, shape operations, broadcasting arithmetic, reductions, `linear`,
-`embedding`, `layerNorm`, `dropout`, `crossEntropy`, `mseLoss`, autograd, and
-the SGD and AdamW optimizers. `src/Lib.mw` is the reference.
+`embedding`, `layerNorm`, `dropout`, `attention`, `crossEntropy`, `mseLoss`,
+autograd, the SGD and AdamW optimizers, and reading tensors from a
+`.safetensors` file (`openWeights`, `weight`). `src/Lib.mw` is the reference.
 
-Not yet: loading pretrained models, operator overloading on tensors, and
-anything else in libtorch that the shim does not expose.
+Not yet: saving weights, operator overloading on tensors, and anything else in
+libtorch that the shim does not expose.
 
 ## Developing
 

@@ -16,6 +16,7 @@ extern "C" {
 
 typedef struct mt_tensor_s *mt_tensor;
 typedef struct mt_optim_s *mt_optim;
+typedef struct mt_weights_s *mt_weights;
 
 /* dtype codes */
 enum { MT_FLOAT32 = 0, MT_FLOAT64 = 1, MT_INT64 = 2, MT_BOOL = 3 };
@@ -115,6 +116,8 @@ mt_tensor mt_tanh(mt_tensor a);
 mt_tensor mt_sigmoid(mt_tensor a);
 mt_tensor mt_relu(mt_tensor a);
 mt_tensor mt_gelu(mt_tensor a);
+mt_tensor mt_sin(mt_tensor a);
+mt_tensor mt_cos(mt_tensor a);
 
 /* --- reductions ------------------------------------------------------------- */
 mt_tensor mt_sum(mt_tensor a);
@@ -138,6 +141,9 @@ mt_tensor mt_dropout(mt_tensor input, double p, int64_t training);
 /* `logits` is (N, C), `target` is int64 (N); mean reduction. */
 mt_tensor mt_cross_entropy(mt_tensor logits, mt_tensor target);
 mt_tensor mt_mse_loss(mt_tensor input, mt_tensor target);
+/* Scaled dot-product attention over the last two dimensions, (..., T, D).
+ * With `causal`, a position attends only to itself and earlier ones. */
+mt_tensor mt_attention(mt_tensor query, mt_tensor key, mt_tensor value, int64_t causal);
 
 /* --- autograd --------------------------------------------------------------- */
 void mt_set_requires_grad(mt_tensor t, int64_t requires_grad);
@@ -154,6 +160,18 @@ mt_optim mt_adamw(const mt_tensor *params, int64_t n, double lr, double beta1, d
 void mt_optim_step(mt_optim o);
 void mt_optim_zero_grad(mt_optim o);
 void mt_optim_free(mt_optim o);
+
+/* --- weight files ----------------------------------------------------------- */
+/* Open a .safetensors file. Only its header is read; mt_weights_get reads one
+ * tensor's data. */
+mt_weights mt_weights_open(const char *path);
+int64_t mt_weights_count(mt_weights w);
+/* The name of tensor `i`, valid until the file is closed; NULL if out of range. */
+const char *mt_weights_name(mt_weights w, int64_t i);
+/* The named tensor, on the CPU. A floating-point tensor is answered as
+ * float32 unless stored as float64, and an integer one as int64. */
+mt_tensor mt_weights_get(mt_weights w, const char *name);
+void mt_weights_free(mt_weights w);
 
 #ifdef __cplusplus
 }

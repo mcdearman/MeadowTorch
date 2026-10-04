@@ -173,6 +173,47 @@ static void test_scopes(void) {
   mt_free(kept); mt_free(outside);
 }
 
+static void test_math(void) {
+  /* attention with identical keys averages the values each position may see */
+  int64_t qshape[] = {1, 3, 2}, vshape[] = {1, 3, 1};
+  double v_data[] = {3, 6, 9};
+  mt_tensor q = mt_zeros(qshape, 3, MT_FLOAT32, MT_CPU);
+  mt_tensor v = mt_from_f64(v_data, 3, vshape, 3, MT_FLOAT32, MT_CPU);
+  mt_tensor causal = mt_attention(q, q, v, 1);
+  mt_tensor full = mt_attention(q, q, v, 0);
+  double out[3];
+  CHECK(causal && mt_copy_f64(causal, out, 3) == 3);
+  CHECK(close_to(out[0], 3.0) && close_to(out[1], 4.5) && close_to(out[2], 6.0));
+  CHECK(full && mt_copy_f64(full, out, 3) == 3 && close_to(out[0], 6.0) && close_to(out[2], 6.0));
+  mt_tensor z = mt_zeros(vshape, 3, MT_FLOAT32, MT_CPU);
+  mt_tensor s = mt_sin(z), c = mt_cos(z);
+  CHECK(close_to(mt_item_f64(mt_sum(s)), 0.0) && close_to(mt_item_f64(mt_sum(c)), 3.0));
+}
+
+static void test_weights(void) {
+  mt_weights w = mt_weights_open("tests/tiny.safetensors");
+  CHECK(w != NULL && mt_weights_count(w) == 3);
+  CHECK(w && strcmp(mt_weights_name(w, 0), "layer.weight") == 0 && mt_weights_name(w, 3) == NULL);
+  mt_tensor m = mt_weights_get(w, "layer.weight");
+  double out[4];
+  CHECK(m && mt_dtype(m) == MT_FLOAT32 && mt_size(m, 0) == 2 && mt_copy_f64(m, out, 4) == 4);
+  CHECK(close_to(out[0], 1.5) && close_to(out[1], -2.0) && close_to(out[2], 0.25) && close_to(out[3], 4.0));
+  mt_tensor ids = mt_weights_get(w, "ids");
+  int64_t iout[3];
+  CHECK(ids && mt_dtype(ids) == MT_INT64 && mt_copy_i64(ids, iout, 3) == 3 && iout[1] == -8 && iout[2] == 9);
+  mt_tensor scale = mt_weights_get(w, "scale");
+  CHECK(scale && mt_ndim(scale) == 0 && close_to(mt_item_f64(scale), 3.5));
+  CHECK(mt_last_error() == NULL);
+  CHECK(mt_weights_get(w, "missing") == NULL && mt_last_error() != NULL);
+  mt_clear_error();
+  CHECK(mt_weights_open("tests/no-such-file.safetensors") == NULL && mt_last_error() != NULL);
+  mt_clear_error();
+  CHECK(mt_weights_open("shim/build.sh") == NULL && mt_last_error() != NULL);
+  mt_clear_error();
+  mt_free(m); mt_free(ids); mt_free(scale);
+  mt_weights_free(w);
+}
+
 static void test_mps(void) {
   if (!mt_mps_available()) { printf("mps: not available, skipped\n"); return; }
   int64_t shape[] = {2, 2};
@@ -197,6 +238,10 @@ int main(void) {
   test_training(make_adamw, 600);
   test_nn();
   test_scopes();
+  mt_scope_enter();
+  test_math();
+  mt_scope_exit();
+  test_weights();
   test_mps();
   if (mt_live_tensors() != 0) {
     failures++;

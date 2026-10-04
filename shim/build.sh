@@ -6,17 +6,30 @@
 #   shim/build.sh install    build, then copy into $PREFIX/lib (default ~/.local/lib)
 #
 # LIBTORCH is a directory holding `include/` and `lib/`: an unpacked libtorch
-# download, or the `torch` package directory of a Python install. By default it
-# is the `torch` that $PYTHON (default python3) imports.
+# download, or the `torch` package directory of a Python install. Without it,
+# $PREFIX/libtorch is used, and on aarch64 macOS downloaded there first if it
+# is missing. On Linux, download the build for your CUDA version from
+# pytorch.org and set LIBTORCH.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
+prefix="${PREFIX:-$HOME/.local}"
+libtorch_version=2.14.1
 
 if [ -z "${LIBTORCH:-}" ]; then
-  LIBTORCH=$("${PYTHON:-python3}" -c 'import os, torch; print(os.path.dirname(torch.__file__))') || {
-    echo "no libtorch: set LIBTORCH, or PYTHON to a Python that has torch installed" >&2
-    exit 1
-  }
+  LIBTORCH="$prefix/libtorch"
+  if [ ! -d "$LIBTORCH/include" ]; then
+    if [ "$(uname -s)-$(uname -m)" != "Darwin-arm64" ]; then
+      echo "no libtorch at $LIBTORCH: download one from pytorch.org and set LIBTORCH" >&2
+      exit 1
+    fi
+    url="https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-$libtorch_version.zip"
+    echo "downloading $url to $LIBTORCH" >&2
+    mkdir -p "$prefix"
+    curl -fL -o "$prefix/libtorch.zip" "$url"
+    unzip -q -o "$prefix/libtorch.zip" -d "$prefix"
+    rm "$prefix/libtorch.zip"
+  fi
 fi
 
 case "$(uname -s)" in
@@ -38,11 +51,11 @@ echo "$out"
 if [ "${1:-}" = "test" ]; then
   ${CC:-cc} -std=c11 -Wall -Wextra -I"$here" "$here/smoke_test.c" -o "$here/build/smoke_test" \
     -L"$here/build" -lmeadow_torch -Wl,-rpath,"$here/build"
-  "$here/build/smoke_test"
+  (cd "$here/.." && "$here/build/smoke_test")
 fi
 
 if [ "${1:-}" = "install" ]; then
-  dest="${PREFIX:-$HOME/.local}/lib"
+  dest="$prefix/lib"
   mkdir -p "$dest"
   cp "$out" "$dest/"
   echo "$dest/libmeadow_torch.$ext"
