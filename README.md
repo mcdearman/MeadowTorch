@@ -1,4 +1,4 @@
-# meadow-torch
+# MeadowTorch
 
 PyTorch for [Meadow](https://github.com/mcdearman/meadow): tensors, autograd,
 optimizers and the GPU, through a small C shim over libtorch.
@@ -34,7 +34,7 @@ The Meadow code calls a shared library, `libmeadow_torch`, which you build once
 from a checkout of this repository:
 
 ```sh
-git clone https://github.com/mcdearman/meadow-torch && cd meadow-torch
+git clone https://github.com/mcdearman/MeadowTorch && cd MeadowTorch
 shim/build.sh install       # builds, then copies to ~/.local/lib
 ```
 
@@ -46,7 +46,7 @@ Then depend on the package:
 
 ```toml
 [dependencies]
-Torch = { git = "https://github.com/mcdearman/meadow-torch", version = "0.1.0" }
+Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.1.0" }
 
 [profile.debug]
 threads = 1

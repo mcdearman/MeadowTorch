@@ -116,7 +116,7 @@ use Device.*
   match found with
   | Just lib -> handle body () with { shim () k -> k lib }
   | None ->
-      raise "cannot find the Torch shim; tried ${paths:?}. Run shim/build.sh install in a checkout of meadow-torch, or set MEADOW_TORCH_LIB"
+      raise "cannot find the Torch shim; tried ${paths:?}. Run shim/build.sh install in a checkout of MeadowTorch, or set MEADOW_TORCH_LIB"
 
 -- --- calling the shim ----------------------------------------------------------
 
