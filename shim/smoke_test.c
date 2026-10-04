@@ -238,6 +238,24 @@ static void test_mps(void) {
   mt_free(a); mt_free(s); mt_free(b); mt_free(c); mt_free(d);
 }
 
+static void test_cuda(void) {
+  if (!mt_cuda_available()) { printf("cuda: not available, skipped\n"); return; }
+  int64_t shape[] = {2, 2};
+  double in[] = {1, 2, 3, 4}, out[4] = {0};
+  mt_tensor a = mt_from_f64(in, 4, shape, 2, MT_FLOAT32, MT_CUDA);
+  mt_tensor b = mt_matmul(a, a);
+  CHECK(a && b && mt_device(b) == MT_CUDA && mt_copy_f64(b, out, 4) == 4);
+  CHECK(close_to(out[0], 7.0) && close_to(out[3], 22.0));
+  mt_set_requires_grad(a, 1);
+  mt_tensor sq = mt_mul(a, a);
+  mt_tensor loss = mt_sum(sq);
+  mt_backward(loss);
+  mt_tensor g = mt_grad(a);
+  CHECK(g && mt_copy_f64(g, out, 4) == 4 && close_to(out[0], 2.0) && close_to(out[3], 8.0));
+  printf("cuda: ok\n");
+  mt_free(a); mt_free(b); mt_free(sq); mt_free(loss); mt_free(g);
+}
+
 int main(void) {
   test_arithmetic();
   test_errors();
@@ -251,6 +269,7 @@ int main(void) {
   mt_scope_exit();
   test_weights();
   test_mps();
+  test_cuda();
   if (mt_live_tensors() != 0) {
     failures++;
     printf("FAIL: %lld tensor handles leaked\n", (long long)mt_live_tensors());

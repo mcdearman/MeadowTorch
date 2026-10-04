@@ -37,20 +37,28 @@ case "$(uname -s)" in
   *)      ext=so;    cxx=${CXX:-c++} ;;
 esac
 
+# A libtorch built with CUDA registers its GPU backend only if libtorch_cuda is
+# loaded, and nothing in the shim names a symbol from it, so the linker is told
+# to keep it.
+cuda=""
+if [ -e "$LIBTORCH/lib/libtorch_cuda.so" ]; then
+  cuda="-Wl,--no-as-needed -ltorch_cuda -Wl,--as-needed"
+fi
+
 mkdir -p "$here/build"
 out="$here/build/libmeadow_torch.$ext"
 
 "$cxx" -std=c++20 -O2 -fPIC -shared -Wall -Wextra \
   -isystem "$LIBTORCH/include" -isystem "$LIBTORCH/include/torch/csrc/api/include" \
   "$here/meadow_torch.cpp" -o "$out" \
-  -L"$LIBTORCH/lib" -ltorch -ltorch_cpu -lc10 \
+  -L"$LIBTORCH/lib" $cuda -ltorch -ltorch_cpu -lc10 \
   -Wl,-rpath,"$LIBTORCH/lib"
 
 echo "$out"
 
 if [ "${1:-}" = "test" ]; then
   ${CC:-cc} -std=c11 -Wall -Wextra -I"$here" "$here/smoke_test.c" -o "$here/build/smoke_test" \
-    -L"$here/build" -lmeadow_torch -Wl,-rpath,"$here/build"
+    -L"$here/build" -lmeadow_torch -lm -Wl,-rpath,"$here/build"
   (cd "$here/.." && "$here/build/smoke_test")
 fi
 
