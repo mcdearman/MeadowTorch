@@ -131,6 +131,14 @@ static void test_nn(void) {
   mt_tensor loss = mt_cross_entropy(logits, target);
   CHECK(loss && close_to(mt_item_f64(loss), log(4.0)));
 
+  /* an ignored position does not count: only the first row is averaged */
+  int64_t some[] = {1, -100};
+  mt_tensor partial = mt_from_i64(some, 2, tshape, 1, MT_CPU);
+  mt_tensor ignoring = mt_cross_entropy_ignoring(logits, partial, -100);
+  CHECK(ignoring && close_to(mt_item_f64(ignoring), log(4.0)));
+  CHECK(mt_mps_allocated() >= 0);
+  mt_free(partial); mt_free(ignoring);
+
   mt_tensor table = mt_arange(0, 12, 1, MT_CPU);
   int64_t t43[] = {4, 3};
   mt_tensor table2 = mt_reshape(table, t43, 2);

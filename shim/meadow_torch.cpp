@@ -1,6 +1,7 @@
 #include "meadow_torch.h"
 
 #include <torch/torch.h>
+#include <ATen/detail/MPSHooksInterface.h>
 
 #include <atomic>
 #include <cstring>
@@ -338,6 +339,12 @@ int64_t mt_set_grad_enabled(int64_t enabled) {
     return previous;
   });
 }
+int64_t mt_mps_allocated(void) {
+  return guard<int64_t>(0, []() -> int64_t {
+    if (!torch::mps::is_available()) return 0;
+    return static_cast<int64_t>(at::detail::getMPSHooks().getCurrentAllocatedMemory());
+  });
+}
 int64_t mt_live_tensors(void) { return live_tensors.load(); }
 
 // --- creation ----------------------------------------------------------------
@@ -574,6 +581,12 @@ mt_tensor mt_dropout(mt_tensor input, double p, int64_t training) {
 }
 mt_tensor mt_cross_entropy(mt_tensor logits, mt_tensor target) {
   return guard_tensor([&] { return torch::nn::functional::cross_entropy(get(logits), get(target)); });
+}
+mt_tensor mt_cross_entropy_ignoring(mt_tensor logits, mt_tensor target, int64_t ignore) {
+  return guard_tensor([&] {
+    return torch::nn::functional::cross_entropy(
+        get(logits), get(target), torch::nn::functional::CrossEntropyFuncOptions().ignore_index(ignore));
+  });
 }
 mt_tensor mt_mse_loss(mt_tensor input, mt_tensor target) {
   return guard_tensor([&] { return torch::mse_loss(get(input), get(target)); });

@@ -47,7 +47,7 @@ Then depend on the package:
 
 ```toml
 [dependencies]
-Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.2.0" }
+Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.3.0" }
 
 [profile.debug]
 threads = 1
@@ -79,7 +79,7 @@ At run time `T.run` opens the first of: `$MEADOW_TORCH_LIB` if set; otherwise
 Creation (`zeros`, `ones`, `full`, `randn`, `rand`, `arange`, `scalar`,
 `fromFloats`, `fromInts`), inspection and reading back, device and dtype
 conversion, shape operations, broadcasting arithmetic, reductions, `linear`,
-`embedding`, `layerNorm`, `dropout`, `attention`, `crossEntropy`, `mseLoss`,
+`embedding`, `layerNorm`, `dropout`, `attention`, `crossEntropy` (with ignored targets), `mseLoss`,
 autograd, the SGD and AdamW optimizers, and reading tensors from a
 `.safetensors` file (`openWeights`, `weight`). `src/Lib.mw` is the reference.
 

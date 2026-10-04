@@ -36,6 +36,8 @@ int64_t mt_cuda_available(void);
 int64_t mt_mps_available(void);
 /* Returns the previous setting. */
 int64_t mt_set_grad_enabled(int64_t enabled);
+/* Bytes the MPS device holds for tensors right now; 0 where there is no MPS. */
+int64_t mt_mps_allocated(void);
 /* Tensor handles alive right now; for leak checks in tests. */
 int64_t mt_live_tensors(void);
 
@@ -140,6 +142,8 @@ mt_tensor mt_layer_norm(mt_tensor input, mt_tensor weight, mt_tensor bias, doubl
 mt_tensor mt_dropout(mt_tensor input, double p, int64_t training);
 /* `logits` is (N, C), `target` is int64 (N); mean reduction. */
 mt_tensor mt_cross_entropy(mt_tensor logits, mt_tensor target);
+/* The same, with positions whose target is `ignore` left out of the mean. */
+mt_tensor mt_cross_entropy_ignoring(mt_tensor logits, mt_tensor target, int64_t ignore);
 mt_tensor mt_mse_loss(mt_tensor input, mt_tensor target);
 /* Scaled dot-product attention over the last two dimensions, (..., T, D).
  * With `causal`, a position attends only to itself and earlier ones. */

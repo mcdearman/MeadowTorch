@@ -231,6 +231,9 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 
 @pub fun mpsAvailable () = intCall "mt_mps_available" [] != 0
 
+-- Bytes the MPS device holds for tensors right now; 0 where there is no MPS.
+@pub fun mpsAllocated () = intCall "mt_mps_allocated" []
+
 -- The best device this machine has.
 @pub fun defaultDevice () = if cudaAvailable () then Cuda else if mpsAvailable () then Mps else Cpu
 
@@ -466,6 +469,11 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 
 -- Mean cross entropy of `logits`, shaped (N, C), against `Int64` classes (N).
 @pub fun crossEntropy (logits : Tensor) (target : Tensor) = tensorCall "mt_cross_entropy" [raw logits, raw target]
+
+-- The same, with positions whose target is `ignore` left out of the mean: the
+-- way to keep padding out of a loss.
+@pub fun crossEntropyIgnoring (ignore : Int) (logits : Tensor) (target : Tensor) =
+  tensorCall "mt_cross_entropy_ignoring" [raw logits, raw target, int ignore]
 
 @pub fun mseLoss (input : Tensor) (target : Tensor) = tensorCall "mt_mse_loss" [raw input, raw target]
 
@@ -704,3 +712,11 @@ fun fitLine makeOptimizer (steps : Int) =
 @test fun aFileThatIsNotWeightsIsAnErr () =
   let got = torch (\() -> openWeights "shim/build.sh") in
   assertTrue (match got with | Err _ -> True | Ok _ -> False) "a shell script is not a safetensors file"
+
+@test fun anIgnoredTargetIsLeftOutOfTheLoss () =
+  let got = torch (\() ->
+    let logits = fromFloats [2, 2] [0.0, 0.0, 5.0, 0.0 -. 5.0] in
+    ( near (item (crossEntropyIgnoring (0 - 100) logits (fromInts [2] [1, 0 - 100]))) 0.6931472
+      , item (crossEntropyIgnoring (0 - 100) logits (fromInts [2] [1, 1])) >. 5.0
+      , mpsAllocated () >= 0 )) in
+  assertEq got (Ok (True, True, True)) "ln 2 from the first row alone; both rows give more"
