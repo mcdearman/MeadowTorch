@@ -28,7 +28,8 @@ Ok([2.0, 4.0, 6.0])
   MeadowTorch 0.3.0 is the last version for the older `Arg.IntArg` names.
 - libtorch 2.x. No Python is needed.
 - A C++20 compiler.
-- macOS or Linux. Tested on aarch64 macOS only.
+- macOS or Linux. Tested on aarch64 macOS (CPU and MPS) and on x86-64 Linux
+  with CUDA, there against the libtorch inside a Python install of PyTorch 2.11.
 
 ## Setup
 
@@ -49,7 +50,7 @@ Then depend on the package:
 
 ```toml
 [dependencies]
-Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.4.0" }
+Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.4.1" }
 
 [profile.debug]
 threads = 1
