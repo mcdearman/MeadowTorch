@@ -22,8 +22,10 @@ Ok([2.0, 4.0, 6.0])
 
 ## Requirements
 
-- A Meadow with `Std.Ffi`. It is newer than the `0.1.0-alpha` release, so for
-  now that means a build of Meadow from source.
+- A Meadow whose `Std.Ffi` names its arguments `Arg.Int`, `Arg.Float`,
+  `Arg.String` and `Arg.Ptr` (commit 0fcd21d or later). That is newer than the
+  `0.1.0-alpha` release, so for now it means a build of Meadow from source.
+  MeadowTorch 0.3.0 is the last version for the older `Arg.IntArg` names.
 - libtorch 2.x. No Python is needed.
 - A C++20 compiler.
 - macOS or Linux. Tested on aarch64 macOS only.
@@ -47,7 +49,7 @@ Then depend on the package:
 
 ```toml
 [dependencies]
-Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.3.0" }
+Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.4.0" }
 
 [profile.debug]
 threads = 1

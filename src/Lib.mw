@@ -82,7 +82,7 @@ use Device.*
 -- The open shim library, answered by `withLibrary`.
 @pub effect Torch { shim : () -> Library }
 
--- --- running -------------------------------------------------------------------
+-- --- running -----------------------------------------------------------------
 
 -- Where `run` looks for the shim, in order: `MEADOW_TORCH_LIB` alone if it is
 -- set; otherwise where `shim/build.sh` leaves it in a checkout of this package,
@@ -101,7 +101,9 @@ use Device.*
 -- Run `body` against the shim at `path`.
 @pub fun withLibrary (path : String) body =
   match Ffi.open path with
-  | Err why -> raise "cannot open the Torch shim at ${path}: ${why} (build it with shim/build.sh)"
+  | Err why ->
+      raise
+        "cannot open the Torch shim at ${path}: ${why} (build it with shim/build.sh)"
   | Ok lib -> handle body () with { shim () k -> k lib }
 
 -- Run `body` against the first shim `libraryPaths` finds.
@@ -112,16 +114,18 @@ use Device.*
       (\acc path ->
         match acc with
         | Just lib -> Just lib
-        | None -> (match Ffi.open path with | Ok lib -> Just lib | Err _ -> None))
+        | None ->
+            (match Ffi.open path with | Ok lib -> Just lib | Err _ -> None))
       None
       paths
   in
   match found with
   | Just lib -> handle body () with { shim () k -> k lib }
   | None ->
-      raise "cannot find the Torch shim; tried ${paths:?}. Run shim/build.sh install in a checkout of MeadowTorch, or set MEADOW_TORCH_LIB"
+      raise
+        "cannot find the Torch shim; tried ${paths:?}. Run shim/build.sh install in a checkout of MeadowTorch, or set MEADOW_TORCH_LIB"
 
--- --- calling the shim ----------------------------------------------------------
+-- --- calling the shim --------------------------------------------------------
 
 fun ok r =
   match r with
@@ -130,15 +134,15 @@ fun ok r =
 
 fun sym (name : String) = ok (Ffi.function (shim ()) name)
 
-fun int (n : Int) : Arg = Arg.IntArg n
+fun int (n : Int) : Arg = Arg.Int n
 
-fun float (x : Float) : Arg = Arg.FloatArg x
+fun float (x : Float) : Arg = Arg.Float x
 
-fun flag (b : Bool) : Arg = Arg.IntArg (if b then 1 else 0)
+fun flag (b : Bool) : Arg = Arg.Int (if b then 1 else 0)
 
-fun ptr (p : Ptr) : Arg = Arg.PtrArg p
+fun ptr (p : Ptr) : Arg = Arg.Ptr p
 
-fun raw (t : Tensor) : Arg = match t with | Tensor p -> Arg.PtrArg p
+fun raw (t : Tensor) : Arg = match t with | Tensor p -> Arg.Ptr p
 
 fun rawAddress (t : Tensor) : Int = match t with | Tensor p -> Ffi.address p
 
@@ -157,7 +161,8 @@ fun tensorOf (name : String) (p : Ptr) =
     raise "${name}: the shim answered no tensor"
   else Tensor p
 
-fun tensorCall (name : String) (args : [Arg]) = tensorOf name (ok (Ffi.callPtr (sym name) args))
+fun tensorCall (name : String) (args : [Arg]) =
+  tensorOf name (ok (Ffi.callPtr (sym name) args))
 
 fun intCall (name : String) (args : [Arg]) =
   let n = ok (Ffi.callInt (sym name) args) in
@@ -184,16 +189,24 @@ fun withInts (xs : [Int]) body =
 -- A call whose leading arguments are a shape: `(const int64_t *shape, ndim, ...)`.
 fun shapedCall (name : String) (shape : [Int]) (rest : [Arg]) =
   let f = sym name in
-  let answer = withInts shape (\p -> Ffi.callPtr f (V.append [ptr p, int (V.length shape)] rest)) in
+  let answer =
+    withInts
+      shape
+      (\p -> Ffi.callPtr f (V.append [ptr p, int (V.length shape)] rest))
+  in
   tensorOf name (ok answer)
 
 -- A call whose leading arguments are tensors: `(const mt_tensor *ts, n, ...)`.
 fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
   let f = sym name in
-  let answer = withInts (V.map rawAddress ts) (\p -> Ffi.callPtr f (V.append [ptr p, int (V.length ts)] rest)) in
+  let answer =
+    withInts
+      (V.map rawAddress ts)
+      (\p -> Ffi.callPtr f (V.append [ptr p, int (V.length ts)] rest))
+  in
   ok answer
 
--- --- memory --------------------------------------------------------------------
+-- --- memory ------------------------------------------------------------------
 
 -- Free a tensor now. It must not be used again.
 @pub fun free (t : Tensor) = unitCall "mt_free" [raw t]
@@ -223,7 +236,7 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 -- How many tensor handles are alive in the whole process, across threads.
 @pub fun liveTensors () = intCall "mt_live_tensors" []
 
--- --- process-wide state --------------------------------------------------------
+-- --- process-wide state ------------------------------------------------------
 
 @pub fun manualSeed (seed : Int) = unitCall "mt_manual_seed" [int seed]
 
@@ -235,7 +248,8 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 @pub fun mpsAllocated () = intCall "mt_mps_allocated" []
 
 -- The best device this machine has.
-@pub fun defaultDevice () = if cudaAvailable () then Cuda else if mpsAvailable () then Mps else Cpu
+@pub fun defaultDevice () =
+  if cudaAvailable () then Cuda else if mpsAvailable () then Mps else Cpu
 
 -- Run `body` without recording gradients.
 @pub fun noGrad body =
@@ -248,7 +262,7 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
       let _ = intCall "mt_set_grad_enabled" [int previous] in
       raise why
 
--- --- creation ------------------------------------------------------------------
+-- --- creation ----------------------------------------------------------------
 --
 -- A new tensor is `Float32` on the CPU unless the function says otherwise; `to`
 -- and `cast` move it.
@@ -257,7 +271,8 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 
 @pub fun ones (shape : [Int]) = shapedCall "mt_ones" shape [int 0, int 0]
 
-@pub fun full (shape : [Int]) (value : Float) = shapedCall "mt_full" shape [float value, int 0, int 0]
+@pub fun full (shape : [Int]) (value : Float) =
+  shapedCall "mt_full" shape [float value, int 0, int 0]
 
 -- Standard normal samples.
 @pub fun randn (shape : [Int]) = shapedCall "mt_randn" shape [int 0]
@@ -266,10 +281,12 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 @pub fun rand (shape : [Int]) = shapedCall "mt_rand" shape [int 0]
 
 -- The `Int64` tensor `[start, start + 1, ..., stop - 1]`.
-@pub fun arange (start : Int) (stop : Int) = tensorCall "mt_arange" [int start, int stop, int 1, int 0]
+@pub fun arange (start : Int) (stop : Int) =
+  tensorCall "mt_arange" [int start, int stop, int 1, int 0]
 
 -- A zero-dimensional tensor.
-@pub fun scalar (value : Float) = tensorCall "mt_scalar_f64" [float value, int 0, int 0]
+@pub fun scalar (value : Float) =
+  tensorCall "mt_scalar_f64" [float value, int 0, int 0]
 
 -- A tensor of `shape` holding `xs` in row-major order.
 @pub fun fromFloats (shape : [Int]) (xs : [Float]) =
@@ -278,7 +295,8 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
   let answer = Ffi.withBuffer (8 * (n + 1)) (\values ->
     match Ffi.writeFloats values 8 xs with
     | Err why -> Err why
-    | Ok _ -> withInts shape (\dims -> Ffi.callPtr f [ptr values, int n, ptr dims, int (V.length shape), int 0, int 0])) in
+    | Ok _ ->
+        withInts shape (\dims -> Ffi.callPtr f [ptr values, int n, ptr dims, int (V.length shape), int 0, int 0])) in
   tensorOf "fromFloats" (ok answer)
 
 -- An `Int64` tensor of `shape` holding `xs` in row-major order.
@@ -288,7 +306,7 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
     withInts shape (\dims -> Ffi.callPtr f [ptr values, int (V.length xs), ptr dims, int (V.length shape), int 0])) in
   tensorOf "fromInts" (ok answer)
 
--- --- inspection ----------------------------------------------------------------
+-- --- inspection --------------------------------------------------------------
 
 @pub fun ndim (t : Tensor) = intCall "mt_ndim" [raw t]
 
@@ -347,42 +365,52 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
     | Err why -> Err why
     | Ok _ -> Ok (Ffi.readText p n)))
 
--- --- conversion ----------------------------------------------------------------
+-- --- conversion --------------------------------------------------------------
 
-@pub fun to (d : Device) (t : Tensor) = tensorCall "mt_to_device" [raw t, int (deviceCode d)]
+@pub fun to (d : Device) (t : Tensor) =
+  tensorCall "mt_to_device" [raw t, int (deviceCode d)]
 
-@pub fun cast (d : Dtype) (t : Tensor) = tensorCall "mt_to_dtype" [raw t, int (dtypeCode d)]
+@pub fun cast (d : Dtype) (t : Tensor) =
+  tensorCall "mt_to_dtype" [raw t, int (dtypeCode d)]
 
 @pub fun clone (t : Tensor) = tensorCall "mt_clone" [raw t]
 
 -- The same values, cut out of the gradient graph.
 @pub fun detach (t : Tensor) = tensorCall "mt_detach" [raw t]
 
--- --- shape ---------------------------------------------------------------------
+-- --- shape -------------------------------------------------------------------
 
 @pub fun reshape (shape : [Int]) (t : Tensor) =
   let f = sym "mt_reshape" in
-  let answer = withInts shape (\p -> Ffi.callPtr f [raw t, ptr p, int (V.length shape)]) in
+  let answer =
+    withInts shape (\p -> Ffi.callPtr f [raw t, ptr p, int (V.length shape)])
+  in
   tensorOf "reshape" (ok answer)
 
-@pub fun transpose (dim0 : Int) (dim1 : Int) (t : Tensor) = tensorCall "mt_transpose" [raw t, int dim0, int dim1]
+@pub fun transpose (dim0 : Int) (dim1 : Int) (t : Tensor) =
+  tensorCall "mt_transpose" [raw t, int dim0, int dim1]
 
-@pub fun squeeze (dim : Int) (t : Tensor) = tensorCall "mt_squeeze" [raw t, int dim]
+@pub fun squeeze (dim : Int) (t : Tensor) =
+  tensorCall "mt_squeeze" [raw t, int dim]
 
-@pub fun unsqueeze (dim : Int) (t : Tensor) = tensorCall "mt_unsqueeze" [raw t, int dim]
+@pub fun unsqueeze (dim : Int) (t : Tensor) =
+  tensorCall "mt_unsqueeze" [raw t, int dim]
 
-@pub fun cat (dim : Int) (ts : [Tensor]) = tensorOf "cat" (listCall "mt_cat" ts [int dim])
+@pub fun cat (dim : Int) (ts : [Tensor]) =
+  tensorOf "cat" (listCall "mt_cat" ts [int dim])
 
-@pub fun stack (dim : Int) (ts : [Tensor]) = tensorOf "stack" (listCall "mt_stack" ts [int dim])
+@pub fun stack (dim : Int) (ts : [Tensor]) =
+  tensorOf "stack" (listCall "mt_stack" ts [int dim])
 
 -- The slices of `t` along `dim` that the `Int64` tensor `index` names.
-@pub fun indexSelect (dim : Int) (index : Tensor) (t : Tensor) = tensorCall "mt_index_select" [raw t, int dim, raw index]
+@pub fun indexSelect (dim : Int) (index : Tensor) (t : Tensor) =
+  tensorCall "mt_index_select" [raw t, int dim, raw index]
 
 -- `length` slices of `t` along `dim`, from `start`.
 @pub fun narrow (dim : Int) (start : Int) (length : Int) (t : Tensor) =
   tensorCall "mt_narrow" [raw t, int dim, int start, int length]
 
--- --- arithmetic ----------------------------------------------------------------
+-- --- arithmetic --------------------------------------------------------------
 --
 -- Elementwise, with PyTorch's broadcasting.
 
@@ -394,13 +422,17 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 
 @pub fun div (a : Tensor) (b : Tensor) = tensorCall "mt_div" [raw a, raw b]
 
-@pub fun matmul (a : Tensor) (b : Tensor) = tensorCall "mt_matmul" [raw a, raw b]
+@pub fun matmul (a : Tensor) (b : Tensor) =
+  tensorCall "mt_matmul" [raw a, raw b]
 
-@pub fun addScalar (s : Float) (a : Tensor) = tensorCall "mt_add_scalar" [raw a, float s]
+@pub fun addScalar (s : Float) (a : Tensor) =
+  tensorCall "mt_add_scalar" [raw a, float s]
 
-@pub fun mulScalar (s : Float) (a : Tensor) = tensorCall "mt_mul_scalar" [raw a, float s]
+@pub fun mulScalar (s : Float) (a : Tensor) =
+  tensorCall "mt_mul_scalar" [raw a, float s]
 
-@pub fun powScalar (exponent : Float) (a : Tensor) = tensorCall "mt_pow_scalar" [raw a, float exponent]
+@pub fun powScalar (exponent : Float) (a : Tensor) =
+  tensorCall "mt_pow_scalar" [raw a, float exponent]
 
 @pub fun neg (a : Tensor) = tensorCall "mt_neg" [raw a]
 
@@ -424,24 +456,29 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 
 @pub fun cos (a : Tensor) = tensorCall "mt_cos" [raw a]
 
--- --- reductions ----------------------------------------------------------------
+-- --- reductions --------------------------------------------------------------
 
 @pub fun sum (a : Tensor) = tensorCall "mt_sum" [raw a]
 
 @pub fun mean (a : Tensor) = tensorCall "mt_mean" [raw a]
 
 -- Along `dim`, which is dropped.
-@pub fun sumDim (dim : Int) (a : Tensor) = tensorCall "mt_sum_dim" [raw a, int dim, int 0]
+@pub fun sumDim (dim : Int) (a : Tensor) =
+  tensorCall "mt_sum_dim" [raw a, int dim, int 0]
 
-@pub fun meanDim (dim : Int) (a : Tensor) = tensorCall "mt_mean_dim" [raw a, int dim, int 0]
+@pub fun meanDim (dim : Int) (a : Tensor) =
+  tensorCall "mt_mean_dim" [raw a, int dim, int 0]
 
-@pub fun argmax (dim : Int) (a : Tensor) = tensorCall "mt_argmax" [raw a, int dim, int 0]
+@pub fun argmax (dim : Int) (a : Tensor) =
+  tensorCall "mt_argmax" [raw a, int dim, int 0]
 
-@pub fun softmax (dim : Int) (a : Tensor) = tensorCall "mt_softmax" [raw a, int dim]
+@pub fun softmax (dim : Int) (a : Tensor) =
+  tensorCall "mt_softmax" [raw a, int dim]
 
-@pub fun logSoftmax (dim : Int) (a : Tensor) = tensorCall "mt_log_softmax" [raw a, int dim]
+@pub fun logSoftmax (dim : Int) (a : Tensor) =
+  tensorCall "mt_log_softmax" [raw a, int dim]
 
--- --- comparison ----------------------------------------------------------------
+-- --- comparison --------------------------------------------------------------
 
 -- Elementwise equality, as a `Bool` tensor.
 @pub fun eq (a : Tensor) (b : Tensor) = tensorCall "mt_eq" [raw a, raw b]
@@ -450,7 +487,7 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 @pub fun allclose (tolerance : Float) (a : Tensor) (b : Tensor) =
   intCall "mt_allclose" [raw a, raw b, float 0.0, float tolerance] != 0
 
--- --- neural network functions --------------------------------------------------
+-- --- neural network functions ------------------------------------------------
 
 -- `input` times `weight` transposed, plus `bias` if there is one.
 @pub fun linear (weight : Tensor) (bias : Maybe Tensor) (input : Tensor) =
@@ -458,7 +495,8 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
   tensorCall "mt_linear" [raw input, raw weight, b]
 
 -- The rows of `weight` that the `Int64` tensor `indices` names.
-@pub fun embedding (weight : Tensor) (indices : Tensor) = tensorCall "mt_embedding" [raw weight, raw indices]
+@pub fun embedding (weight : Tensor) (indices : Tensor) =
+  tensorCall "mt_embedding" [raw weight, raw indices]
 
 -- Normalize over the trailing dimensions `weight` has.
 @pub fun layerNorm (weight : Tensor) (bias : Tensor) (input : Tensor) =
@@ -468,21 +506,25 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
   tensorCall "mt_dropout" [raw input, float p, flag training]
 
 -- Mean cross entropy of `logits`, shaped (N, C), against `Int64` classes (N).
-@pub fun crossEntropy (logits : Tensor) (target : Tensor) = tensorCall "mt_cross_entropy" [raw logits, raw target]
+@pub fun crossEntropy (logits : Tensor) (target : Tensor) =
+  tensorCall "mt_cross_entropy" [raw logits, raw target]
 
 -- The same, with positions whose target is `ignore` left out of the mean: the
 -- way to keep padding out of a loss.
-@pub fun crossEntropyIgnoring (ignore : Int) (logits : Tensor) (target : Tensor) =
+@pub fun crossEntropyIgnoring (ignore : Int) (logits : Tensor)
+    (target : Tensor) =
   tensorCall "mt_cross_entropy_ignoring" [raw logits, raw target, int ignore]
 
-@pub fun mseLoss (input : Tensor) (target : Tensor) = tensorCall "mt_mse_loss" [raw input, raw target]
+@pub fun mseLoss (input : Tensor) (target : Tensor) =
+  tensorCall "mt_mse_loss" [raw input, raw target]
 
 -- Scaled dot-product attention over the last two dimensions, (..., T, D). With
 -- `causal`, a position attends only to itself and earlier ones.
-@pub fun attention (causal : Bool) (query : Tensor) (key : Tensor) (value : Tensor) =
+@pub fun attention (causal : Bool) (query : Tensor) (key : Tensor)
+    (value : Tensor) =
   tensorCall "mt_attention" [raw query, raw key, raw value, flag causal]
 
--- --- autograd ------------------------------------------------------------------
+-- --- autograd ----------------------------------------------------------------
 
 -- Mark `t` as a parameter to differentiate with respect to; answers `t`.
 @pub fun requireGrad (t : Tensor) =
@@ -501,9 +543,10 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 @pub fun zeroGrad (t : Tensor) = unitCall "mt_zero_grad" [raw t]
 
 -- `t += alpha * other`, in place and outside the gradient graph.
-@pub fun addInPlace (alpha : Float) (other : Tensor) (t : Tensor) = unitCall "mt_add_inplace" [raw t, raw other, float alpha]
+@pub fun addInPlace (alpha : Float) (other : Tensor) (t : Tensor) =
+  unitCall "mt_add_inplace" [raw t, raw other, float alpha]
 
--- --- optimizers ----------------------------------------------------------------
+-- --- optimizers --------------------------------------------------------------
 --
 -- An optimizer holds its parameters, so they stay alive until `freeOptimizer`
 -- even if their handles are freed. It is not owned by any scope.
@@ -514,32 +557,39 @@ fun optimizerOf (name : String) (p : Ptr) =
     raise "${name}: the shim answered no optimizer"
   else Optimizer p
 
-fun rawOptimizer (o : Optimizer) : Arg = match o with | Optimizer p -> Arg.PtrArg p
+fun rawOptimizer (o : Optimizer) : Arg = match o with | Optimizer p -> Arg.Ptr p
 
 @pub fun sgd (lr : Float) (params : [Tensor]) =
   optimizerOf "sgd" (listCall "mt_sgd" params [float lr, float 0.0, float 0.0])
 
 -- AdamW with PyTorch's default betas and epsilon.
 @pub fun adamw (lr : Float) (weightDecay : Float) (params : [Tensor]) =
-  optimizerOf "adamw" (listCall "mt_adamw" params [float lr, float 0.9, float 0.999, float 0.00000001, float weightDecay])
+  optimizerOf
+    "adamw"
+    (listCall
+      "mt_adamw"
+      params
+      [float lr, float 0.9, float 0.999, float 0.00000001, float weightDecay])
 
 -- Update every parameter from its gradient.
 @pub fun step (o : Optimizer) = unitCall "mt_optim_step" [rawOptimizer o]
 
 -- Clear every parameter's gradient.
-@pub fun zeroGrads (o : Optimizer) = unitCall "mt_optim_zero_grad" [rawOptimizer o]
+@pub fun zeroGrads (o : Optimizer) =
+  unitCall "mt_optim_zero_grad" [rawOptimizer o]
 
-@pub fun freeOptimizer (o : Optimizer) = unitCall "mt_optim_free" [rawOptimizer o]
+@pub fun freeOptimizer (o : Optimizer) =
+  unitCall "mt_optim_free" [rawOptimizer o]
 
--- --- weight files -------------------------------------------------------------
+-- --- weight files ------------------------------------------------------------
 --
 -- A `.safetensors` file, as Hugging Face publishes models. Opening one reads
 -- only its header; `weight` reads one tensor. Close it with `closeWeights`.
 
-fun rawWeights (w : Weights) : Arg = match w with | Weights p -> Arg.PtrArg p
+fun rawWeights (w : Weights) : Arg = match w with | Weights p -> Arg.Ptr p
 
 @pub fun openWeights (path : String) =
-  let p = ok (Ffi.callPtr (sym "mt_weights_open") [Arg.StringArg path]) in
+  let p = ok (Ffi.callPtr (sym "mt_weights_open") [Arg.String path]) in
   if Ffi.isNull p then
     let _ = check "openWeights" in
     raise "openWeights: the shim answered no file"
@@ -548,15 +598,18 @@ fun rawWeights (w : Weights) : Arg = match w with | Weights p -> Arg.PtrArg p
 -- The name of every tensor in the file, in the file's order.
 @pub fun weightNames (w : Weights) =
   let f = sym "mt_weights_name" in
-  V.map (\i -> ok (Ffi.callString f [rawWeights w, int i])) (V.range 0 (intCall "mt_weights_count" [rawWeights w]))
+  V.map
+    (\i -> ok (Ffi.callString f [rawWeights w, int i]))
+    (V.range 0 (intCall "mt_weights_count" [rawWeights w]))
 
 -- The named tensor, on the CPU: `Float32` if it is stored as any float but
 -- `Float64`, and `Int64` if it is stored as any integer.
-@pub fun weight (w : Weights) (name : String) = tensorCall "mt_weights_get" [rawWeights w, Arg.StringArg name]
+@pub fun weight (w : Weights) (name : String) =
+  tensorCall "mt_weights_get" [rawWeights w, Arg.String name]
 
 @pub fun closeWeights (w : Weights) = unitCall "mt_weights_free" [rawWeights w]
 
--- --- tests ---------------------------------------------------------------------
+-- --- tests -------------------------------------------------------------------
 --
 -- Run from the repository root, after `shim/build.sh`:
 --
@@ -578,27 +631,70 @@ fun near (a : Float) (b : Float) : Bool = a -. b <. 0.0001 and b -. a <. 0.0001
 @test fun tensorsAreMadeAndReadBack () =
   let got = torch (\() ->
     let a = fromFloats [2, 3] [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] in
-    (shape a, numel a, dtype a, device a, toFloats a, toFloats (full [2] 2.5), toInts (arange 0 4))) in
-  assertEq got (Ok ([2, 3], 6, Float32, Cpu, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2.5, 2.5], [0, 1, 2, 3])) "what went in comes out"
+    (
+      shape a,
+      numel a,
+      dtype a,
+      device a,
+      toFloats a,
+      toFloats (full [2] 2.5),
+      toInts (arange 0 4)
+    )) in
+  assertEq
+    got
+    (Ok
+      (
+        [2, 3],
+        6,
+        Float32,
+        Cpu,
+        [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        [2.5, 2.5],
+        [0, 1, 2, 3]
+      ))
+    "what went in comes out"
 
 @test fun arithmeticBroadcastsAndMultiplies () =
   let got = torch (\() ->
     let a = fromFloats [2, 3] [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] in
     let product = matmul a (transpose 0 1 a) in
-    (item (sum (add a (ones [3]))), shape product, toFloats product, toFloats (mulScalar 2.0 (neg (scalar 1.5))))) in
-  assertEq got (Ok (27.0, [2, 2], [14.0, 32.0, 32.0, 77.0], [0.0 -. 3.0])) "sum, matmul and scalars"
+    (
+      item (sum (add a (ones [3]))),
+      shape product,
+      toFloats product,
+      toFloats (mulScalar 2.0 (neg (scalar 1.5)))
+    )) in
+  assertEq
+    got
+    (Ok (27.0, [2, 2], [14.0, 32.0, 32.0, 77.0], [0.0 -. 3.0]))
+    "sum, matmul and scalars"
 
 @test fun aRejectedCallRaisesAndTheNextOneWorks () =
   let got = torch (\() ->
     let a = ones [2, 3] in
     let failure = toResult (\() -> matmul a a) in
     let said = match failure with | Err why -> why | Ok _ -> "no error" in
-    (S.contains "shapes cannot be multiplied" said, S.contains "frame #" said, item (sum a))) in
-  assertEq got (Ok (True, False, 6.0)) "libtorch's message, without its backtrace"
+    (
+      S.contains "shapes cannot be multiplied" said,
+      S.contains "frame #" said,
+      item (sum a)
+    )) in
+  assertEq
+    got
+    (Ok (True, False, 6.0))
+    "libtorch's message, without its backtrace"
 
 @test fun aMissingLibraryIsAnErr () =
-  let got = toResult (\() -> withLibrary "/no/such/libmeadow_torch.dylib" (\() -> item (scalar 1.0))) in
-  assertTrue (match got with | Err why -> S.contains "build.sh" why | Ok _ -> False) "and says how to build it"
+  let got =
+    toResult
+      (\() ->
+        withLibrary
+          "/no/such/libmeadow_torch.dylib"
+          (\() -> item (scalar 1.0)))
+  in
+  assertTrue
+    (match got with | Err why -> S.contains "build.sh" why | Ok _ -> False)
+    "and says how to build it"
 
 @test fun gradientsFlowBack () =
   let got = torch (\() ->
@@ -608,10 +704,14 @@ fun near (a : Float) (b : Float) : Bool = a -. b <. 0.0001 and b -. a <. 0.0001
     let after = match grad x with | Just g -> toFloats g | None -> [] in
     let detached = noGrad (\() -> requiresGrad (mul x x)) in
     (requiresGrad x, before, after, detached, requiresGrad (mul x x))) in
-  assertEq got (Ok (True, True, [2.0, 4.0, 6.0], False, True)) "d/dx sum(x^2) = 2x, and noGrad records nothing"
+  assertEq
+    got
+    (Ok (True, True, [2.0, 4.0, 6.0], False, True))
+    "d/dx sum(x^2) = 2x, and noGrad records nothing"
 
 -- `steps` steps of fitting `linear w b x` to `y`.
-fun fit (opt : Optimizer) (w : Tensor) (b : Tensor) (x : Tensor) (y : Tensor) (steps : Int) =
+fun fit (opt : Optimizer) (w : Tensor) (b : Tensor) (x : Tensor) (y : Tensor)
+    (steps : Int) =
   if steps == 0 then ()
   else
     let _ = scope (\() ->
@@ -625,7 +725,9 @@ fun fit (opt : Optimizer) (w : Tensor) (b : Tensor) (x : Tensor) (y : Tensor) (s
 -- many tensors the training loop left in the scope beyond the four it started with.
 fun fitLine makeOptimizer (steps : Int) =
   torch (\() ->
-    let xs = [0.0 -. 1.0, 0.0 -. 0.75, 0.0 -. 0.5, 0.0 -. 0.25, 0.0, 0.25, 0.5, 0.75] in
+    let xs =
+      [0.0 -. 1.0, 0.0 -. 0.75, 0.0 -. 0.5, 0.0 -. 0.25, 0.0, 0.25, 0.5, 0.75]
+    in
     let x = fromFloats [8, 1] xs in
     let y = fromFloats [8, 1] (V.map (\v -> 2.0 *. v +. 1.0) xs) in
     let w = requireGrad (zeros [1, 1]) in
@@ -636,9 +738,17 @@ fun fitLine makeOptimizer (steps : Int) =
     let _ = freeOptimizer opt in
     (near (item w) 2.0, near (item b) 1.0, scopeSize () - live))
 
-@test fun sgdFitsALine () = assertEq (fitLine (\params -> sgd 0.3 params) 200) (Ok (True, True, 0)) "w = 2, b = 1, nothing leaked"
+@test fun sgdFitsALine () =
+  assertEq
+    (fitLine (\params -> sgd 0.3 params) 200)
+    (Ok (True, True, 0))
+    "w = 2, b = 1, nothing leaked"
 
-@test fun adamwFitsALine () = assertEq (fitLine (\params -> adamw 0.05 0.0 params) 600) (Ok (True, True, 0)) "w = 2, b = 1, nothing leaked"
+@test fun adamwFitsALine () =
+  assertEq
+    (fitLine (\params -> adamw 0.05 0.0 params) 600)
+    (Ok (True, True, 0))
+    "w = 2, b = 1, nothing leaked"
 
 @test fun lossesAndLookups () =
   let got = torch (\() ->
@@ -650,7 +760,18 @@ fun fitLine makeOptimizer (steps : Int) =
       , toFloats (sumDim 0 (softmax 1 (zeros [2, 2])))
       , shape (cat 0 [table, table])
       , shape (stack 0 [table, table]) )) in
-  assertEq got (Ok (True, [3.0, 4.0, 5.0, 9.0, 10.0, 11.0], [2, 2, 2, 2], [1.0, 1.0], [8, 3], [2, 4, 3])) "ln 4, rows 1 and 3, the last column"
+  assertEq
+    got
+    (Ok
+      (
+        True,
+        [3.0, 4.0, 5.0, 9.0, 10.0, 11.0],
+        [2, 2, 2, 2],
+        [1.0, 1.0],
+        [8, 3],
+        [2, 4, 3]
+      ))
+    "ln 4, rows 1 and 3, the last column"
 
 @test fun aScopeFreesWhatItMadeAndKeepsWhatItIsTold () =
   let got = torch (\() ->
@@ -660,15 +781,30 @@ fun fitLine makeOptimizer (steps : Int) =
       keep (add a a)) in
     let survivors = scopeSize () in
     let value = toFloats kept in
-    let raised = toResult (\() -> scope (\() -> matmul (ones [2, 3]) (ones [2, 3]))) in
+    let raised =
+      toResult (\() -> scope (\() -> matmul (ones [2, 3]) (ones [2, 3])))
+    in
     let afterRaise = scopeSize () in
     let _ = free kept in
-    (survivors, value, match raised with | Err _ -> True | Ok _ -> False, afterRaise, scopeSize ())) in
-  assertEq got (Ok (1, [2.0, 2.0], True, 1, 0)) "one survivor, a raise still frees, and free takes it out of its scope"
+    (
+      survivors,
+      value,
+      match raised with | Err _ -> True | Ok _ -> False,
+      afterRaise,
+      scopeSize ()
+    )) in
+  assertEq
+    got
+    (Ok (1, [2.0, 2.0], True, 1, 0))
+    "one survivor, a raise still frees, and free takes it out of its scope"
 
 @test fun aTensorPrintsAsPyTorchPrintsIt () =
   let got = torch (\() -> toString (fromFloats [2] [1.0, 6.0])) in
-  assertTrue (match got with | Ok text -> S.contains "6" text and S.contains "CPUFloatType" text | Err _ -> False) "its values and type"
+  assertTrue
+    (match got with
+     | Ok text -> S.contains "6" text and S.contains "CPUFloatType" text
+     | Err _ -> False)
+    "its values and type"
 
 @test fun theGpuComputesWhereThereIsOne () =
   let got = torch (\() ->
@@ -682,8 +818,16 @@ fun fitLine makeOptimizer (steps : Int) =
   let got = torch (\() ->
     let q = zeros [1, 3, 2] in
     let v = fromFloats [1, 3, 1] [3.0, 6.0, 9.0] in
-    (toFloats (attention True q q v), toFloats (attention False q q v), toFloats (cos (zeros [2])), toFloats (sin (zeros [2])))) in
-  assertEq got (Ok ([3.0, 4.5, 6.0], [6.0, 6.0, 6.0], [1.0, 1.0], [0.0, 0.0])) "causal, then not"
+    (
+      toFloats (attention True q q v),
+      toFloats (attention False q q v),
+      toFloats (cos (zeros [2])),
+      toFloats (sin (zeros [2]))
+    )) in
+  assertEq
+    got
+    (Ok ([3.0, 4.5, 6.0], [6.0, 6.0, 6.0], [1.0, 1.0], [0.0, 0.0]))
+    "causal, then not"
 
 @test fun weightsAreReadFromASafetensorsFile () =
   let got = torch (\() ->
@@ -696,7 +840,9 @@ fun fitLine makeOptimizer (steps : Int) =
         , (shape m, dtype m, toFloats m)
         , (dtype ids, toInts ids)
         , item (weight w "scale")
-        , match missing with | Err why -> S.contains "no tensor named missing" why | Ok _ -> False ) in
+        , match missing with
+        | Err why -> S.contains "no tensor named missing" why
+        | Ok _ -> False ) in
       let _ = closeWeights w in
       answer) in
   assertEq
@@ -711,12 +857,20 @@ fun fitLine makeOptimizer (steps : Int) =
 
 @test fun aFileThatIsNotWeightsIsAnErr () =
   let got = torch (\() -> openWeights "shim/build.sh") in
-  assertTrue (match got with | Err _ -> True | Ok _ -> False) "a shell script is not a safetensors file"
+  assertTrue
+    (match got with | Err _ -> True | Ok _ -> False)
+    "a shell script is not a safetensors file"
 
 @test fun anIgnoredTargetIsLeftOutOfTheLoss () =
   let got = torch (\() ->
     let logits = fromFloats [2, 2] [0.0, 0.0, 5.0, 0.0 -. 5.0] in
-    ( near (item (crossEntropyIgnoring (0 - 100) logits (fromInts [2] [1, 0 - 100]))) 0.6931472
+    (near
+      (item
+        (crossEntropyIgnoring (0 - 100) logits (fromInts [2] [1, 0 - 100])))
+      0.6931472
       , item (crossEntropyIgnoring (0 - 100) logits (fromInts [2] [1, 1])) >. 5.0
       , mpsAllocated () >= 0 )) in
-  assertEq got (Ok (True, True, True)) "ln 2 from the first row alone; both rows give more"
+  assertEq
+    got
+    (Ok (True, True, True))
+    "ln 2 from the first row alone; both rows give more"
