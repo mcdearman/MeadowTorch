@@ -1,0 +1,13 @@
+[package]
+name = "Xor"
+version = "0.1.0"
+
+[dependencies]
+Torch = { path = "../.." }
+
+# See the README: Torch wants one scheduler worker.
+[profile.debug]
+threads = 1
+
+[profile.release]
+threads = 1

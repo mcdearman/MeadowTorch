@@ -1,0 +1,45 @@
+-- A two-layer network learns XOR, on the GPU where there is one.
+--
+--   shim/build.sh
+--   meadow run examples/Xor
+
+use Torch as T
+use Std.Exn (toResult)
+
+-- One training step; answers the loss before the update.
+fun trainStep opt w1 b1 w2 b2 x y =
+  T.scope (\() ->
+    let hidden = T.tanh (T.linear w1 (Just b1) x) in
+    let loss = T.mseLoss (T.linear w2 (Just b2) hidden) y in
+    let _ = T.zeroGrads opt in
+    let _ = T.backward loss in
+    let _ = T.step opt in
+    T.item loss)
+
+fun train opt w1 b1 w2 b2 x y (step : Int) (steps : Int) =
+  if step == steps then ()
+  else
+    let loss = trainStep opt w1 b1 w2 b2 x y in
+    let _ = if step % 100 == 0 then println "step ${step}: loss ${loss}" else () in
+    train opt w1 b1 w2 b2 x y (step + 1) steps
+
+fun xor () =
+  T.scope (\() ->
+    let device = T.defaultDevice () in
+    let _ = println "device: ${device:?}" in
+    let _ = T.manualSeed 0 in
+    let x = T.to device (T.fromFloats [4, 2] [0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0]) in
+    let y = T.to device (T.fromFloats [4, 1] [0.0, 1.0, 1.0, 0.0]) in
+    let w1 = T.requireGrad (T.to device (T.randn [8, 2])) in
+    let b1 = T.requireGrad (T.to device (T.zeros [8])) in
+    let w2 = T.requireGrad (T.to device (T.randn [1, 8])) in
+    let b2 = T.requireGrad (T.to device (T.zeros [1])) in
+    let opt = T.adamw 0.05 0.0 [w1, b1, w2, b2] in
+    let _ = train opt w1 b1 w2 b2 x y 0 500 in
+    let _ = T.freeOptimizer opt in
+    T.toFloats (T.noGrad (\() -> T.linear w2 (Just b2) (T.tanh (T.linear w1 (Just b1) x)))))
+
+fun main () =
+  match toResult (\() -> T.run xor) with
+  | Ok predictions -> println "XOR of 00, 01, 10, 11: ${predictions:?}"
+  | Err why -> println "failed: ${why}"
