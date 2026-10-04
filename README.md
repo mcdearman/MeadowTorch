@@ -26,6 +26,9 @@ Ok([2.0, 4.0, 6.0])
   `Arg.String` and `Arg.Ptr` (commit 0fcd21d or later). That is newer than the
   `0.1.0-alpha` release, so for now it means a build of Meadow from source.
   MeadowTorch 0.3.0 is the last version for the older `Arg.IntArg` names.
+  `Std.Ffi` is an unstable feature, which this package asks for with
+  `features = ["ffi"]`, so it needs a nightly Meadow or a build from a checkout,
+  not a stable release.
 - libtorch 2.x. No Python is needed.
 - A C++20 compiler.
 - macOS or Linux. Tested on aarch64 macOS (CPU and MPS) and on x86-64 Linux
@@ -50,7 +53,7 @@ Then depend on the package:
 
 ```toml
 [dependencies]
-Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.4.1" }
+Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.4.2" }
 
 [profile.debug]
 threads = 1
