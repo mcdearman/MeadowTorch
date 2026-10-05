@@ -104,6 +104,9 @@ mt_tensor mt_sub(mt_tensor a, mt_tensor b);
 mt_tensor mt_mul(mt_tensor a, mt_tensor b);
 mt_tensor mt_div(mt_tensor a, mt_tensor b);
 mt_tensor mt_matmul(mt_tensor a, mt_tensor b);
+/* X such that a X = b, for a square `a`. Solved on the CPU, whatever device
+ * the arguments are on, and answered on `b`'s device. */
+mt_tensor mt_solve(mt_tensor a, mt_tensor b);
 mt_tensor mt_add_scalar(mt_tensor a, double s);
 mt_tensor mt_mul_scalar(mt_tensor a, double s);
 mt_tensor mt_pow_scalar(mt_tensor a, double exponent);

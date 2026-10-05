@@ -1,6 +1,6 @@
 [package]
 name = "Torch"
-version = "0.4.2"
+version = "0.5.0"
 # Std.Ffi is an unstable feature: a stable Meadow refuses it, and a nightly or a
 # build from a checkout accepts it.
 features = ["ffi"]

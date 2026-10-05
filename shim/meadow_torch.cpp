@@ -509,6 +509,8 @@ MT_BINARY(mt_sub, x - y)
 MT_BINARY(mt_mul, x * y)
 MT_BINARY(mt_div, x / y)
 MT_BINARY(mt_matmul, torch::matmul(x, y))
+// Not every device has a solver (MPS has none), and the systems here are small.
+MT_BINARY(mt_solve, torch::linalg_solve(x.to(torch::kCPU), y.to(torch::kCPU)).to(y.device()))
 mt_tensor mt_add_scalar(mt_tensor a, double s) {
   return guard_tensor([&] { return get(a) + s; });
 }

@@ -198,6 +198,17 @@ static void test_math(void) {
   CHECK(close_to(mt_item_f64(mt_sum(s)), 0.0) && close_to(mt_item_f64(mt_sum(c)), 3.0));
 }
 
+static void test_solve(void) {
+  /* [[2, 0], [0, 4]] X = [[2], [8]] has X = [[1], [2]] */
+  int64_t a_shape[] = {2, 2}, b_shape[] = {2, 1};
+  double a_data[] = {2, 0, 0, 4}, b_data[] = {2, 8}, out[2];
+  mt_tensor a = mt_from_f64(a_data, 4, a_shape, 2, MT_FLOAT32, MT_CPU);
+  mt_tensor b = mt_from_f64(b_data, 2, b_shape, 2, MT_FLOAT32, MT_CPU);
+  mt_tensor x = mt_solve(a, b);
+  CHECK(x && mt_copy_f64(x, out, 2) == 2 && close_to(out[0], 1.0) && close_to(out[1], 2.0));
+  mt_free(a); mt_free(b); mt_free(x);
+}
+
 static void test_weights(void) {
   mt_weights w = mt_weights_open("tests/tiny.safetensors");
   CHECK(w != NULL && mt_weights_count(w) == 3);
@@ -268,6 +279,7 @@ int main(void) {
   test_math();
   mt_scope_exit();
   test_weights();
+  test_solve();
   test_mps();
   test_cuda();
   if (mt_live_tensors() != 0) {

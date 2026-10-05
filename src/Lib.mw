@@ -189,11 +189,7 @@ fun withInts (xs : [Int]) body =
 -- A call whose leading arguments are a shape: `(const int64_t *shape, ndim, ...)`.
 fun shapedCall (name : String) (shape : [Int]) (rest : [Arg]) =
   let f = sym name in
-  let answer =
-    withInts
-      shape
-      (\p -> Ffi.callPtr f (V.append [ptr p, int (V.length shape)] rest))
-  in
+  let answer = withInts shape (\p -> Ffi.callPtr f (V.append [ptr p, int (V.length shape)] rest)) in
   tensorOf name (ok answer)
 
 -- A call whose leading arguments are tensors: `(const mt_tensor *ts, n, ...)`.
@@ -382,9 +378,7 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 
 @pub fun reshape (shape : [Int]) (t : Tensor) =
   let f = sym "mt_reshape" in
-  let answer =
-    withInts shape (\p -> Ffi.callPtr f [raw t, ptr p, int (V.length shape)])
-  in
+  let answer = withInts shape (\p -> Ffi.callPtr f [raw t, ptr p, int (V.length shape)]) in
   tensorOf "reshape" (ok answer)
 
 @pub fun transpose (dim0 : Int) (dim1 : Int) (t : Tensor) =
@@ -424,6 +418,10 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 
 @pub fun matmul (a : Tensor) (b : Tensor) =
   tensorCall "mt_matmul" [raw a, raw b]
+
+-- The X for which `a` X = `b`, where `a` is square. It is solved on the CPU,
+-- whatever device the arguments are on, and answered on `b`'s.
+@pub fun solve (a : Tensor) (b : Tensor) = tensorCall "mt_solve" [raw a, raw b]
 
 @pub fun addScalar (s : Float) (a : Tensor) =
   tensorCall "mt_add_scalar" [raw a, float s]
@@ -725,9 +723,7 @@ fun fit (opt : Optimizer) (w : Tensor) (b : Tensor) (x : Tensor) (y : Tensor)
 -- many tensors the training loop left in the scope beyond the four it started with.
 fun fitLine makeOptimizer (steps : Int) =
   torch (\() ->
-    let xs =
-      [0.0 -. 1.0, 0.0 -. 0.75, 0.0 -. 0.5, 0.0 -. 0.25, 0.0, 0.25, 0.5, 0.75]
-    in
+    let xs = [0.0 -. 1.0, 0.0 -. 0.75, 0.0 -. 0.5, 0.0 -. 0.25, 0.0, 0.25, 0.5, 0.75] in
     let x = fromFloats [8, 1] xs in
     let y = fromFloats [8, 1] (V.map (\v -> 2.0 *. v +. 1.0) xs) in
     let w = requireGrad (zeros [1, 1]) in
@@ -781,9 +777,7 @@ fun fitLine makeOptimizer (steps : Int) =
       keep (add a a)) in
     let survivors = scopeSize () in
     let value = toFloats kept in
-    let raised =
-      toResult (\() -> scope (\() -> matmul (ones [2, 3]) (ones [2, 3])))
-    in
+    let raised = toResult (\() -> scope (\() -> matmul (ones [2, 3]) (ones [2, 3]))) in
     let afterRaise = scopeSize () in
     let _ = free kept in
     (
@@ -843,8 +837,8 @@ fun fitLine makeOptimizer (steps : Int) =
         , match missing with
         | Err why -> S.contains "no tensor named missing" why
         | Ok _ -> False ) in
-      let _ = closeWeights w in
-      answer) in
+    let _ = closeWeights w in
+    answer) in
   assertEq
     got
     (Ok
@@ -874,3 +868,10 @@ fun fitLine makeOptimizer (steps : Int) =
     got
     (Ok (True, True, True))
     "ln 2 from the first row alone; both rows give more"
+
+@test fun aLinearSystemIsSolved () =
+  let got = torch (\() ->
+    let a = fromFloats [2, 2] [2.0, 1.0, 1.0, 3.0] in
+    let x = fromFloats [2, 2] [1.0, 0.0, 2.0, 0.0 -. 1.0] in
+    allclose 0.0001 (solve a (matmul a x)) x) in
+  assertEq got (Ok True) "the X that a X was made from"
