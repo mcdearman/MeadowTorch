@@ -142,7 +142,10 @@ fun withShim (lib : Library) body =
       (\acc path ->
         match acc with
         | Just lib -> Just lib
-        | None -> (match Ffi.open path with | Ok lib -> Just lib | Err _ -> None))
+        | None ->
+            (match Ffi.open path with
+             | Ok lib -> Just lib
+             | Err _ -> None))
       None
       paths
   in match found with
@@ -703,7 +706,9 @@ fun near (a : Float) (b : Float) : Bool = a -. b <. 0.0001 and b -. a <. 0.0001
   let got =
     toResult (\() -> withLibrary "/no/such/libmeadow_torch.dylib" (\() -> item (scalar 1.0)))
   in assertTrue
-       (match got with | Err why -> S.contains "build.sh" why | Ok _ -> False)
+       (match got with
+        | Err why -> S.contains "build.sh" why
+        | Ok _ -> False)
        "and says how to build it"
 
 @test fun gradientsFlowBack () =
@@ -896,7 +901,10 @@ fun fitLine makeOptimizer (steps : Int) =
         (\found path ->
           match found with
           | Just lib -> Just lib
-          | None -> (match Ffi.open path with | Ok lib -> Just lib | Err _ -> None))
+          | None ->
+              (match Ffi.open path with
+               | Ok lib -> Just lib
+               | Err _ -> None))
         None
         (libraryPaths ()) with
       | None -> ["no shim found"]
