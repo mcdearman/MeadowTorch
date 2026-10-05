@@ -65,6 +65,9 @@ fi
 if [ "${1:-}" = "install" ]; then
   dest="$prefix/lib"
   mkdir -p "$dest"
-  cp "$out" "$dest/"
+  # Copied beside it and renamed over it: writing into a library that a running
+  # program has loaded makes macOS kill whatever loads it next.
+  cp "$out" "$dest/.libmeadow_torch.$ext.new"
+  mv -f "$dest/.libmeadow_torch.$ext.new" "$dest/libmeadow_torch.$ext"
   echo "$dest/libmeadow_torch.$ext"
 fi
