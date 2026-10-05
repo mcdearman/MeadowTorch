@@ -53,7 +53,7 @@ Then depend on the package:
 
 ```toml
 [dependencies]
-Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.5.0" }
+Torch = { git = "https://github.com/mcdearman/MeadowTorch", version = "0.6.0" }
 
 [profile.debug]
 threads = 1
