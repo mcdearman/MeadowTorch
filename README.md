@@ -99,3 +99,7 @@ shim/build.sh test          # build the shim and run its C smoke test
 meadow test                 # the Meadow tests, against shim/build/
 meadow run examples/Xor     # a two-layer network learns XOR
 ```
+
+## License
+
+BSD 3-Clause. See [LICENSE](LICENSE).
