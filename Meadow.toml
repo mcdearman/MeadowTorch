@@ -1,9 +1,6 @@
 [package]
 name = "Torch"
 version = "0.5.0"
-# Std.Ffi is an unstable feature: a stable Meadow refuses it, and a nightly or a
-# build from a checkout accepts it.
-features = ["ffi"]
 
 # libtorch keeps its grad mode per OS thread, and the shim its scopes and last
 # error. One worker keeps every green thread on one OS thread. A profile is the

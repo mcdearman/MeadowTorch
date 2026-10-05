@@ -27,6 +27,10 @@
 -- The dtype and device codes are the ones `shim/meadow_torch.h` declares; the
 -- two must change together.
 
+-- Std.Ffi is an unstable feature: a stable Meadow refuses it, and a nightly or
+-- a build from a checkout accepts it.
+@!feature(ffi)
+
 use Std.Ffi as Ffi
 use Std.Ffi (Arg, Ptr, Library, Function)
 use Std.Exn (raise, toResult)
