@@ -498,6 +498,9 @@ mt_tensor mt_stack(const mt_tensor *ts, int64_t n, int64_t dim) {
 mt_tensor mt_index_select(mt_tensor t, int64_t dim, mt_tensor index) {
   return guard_tensor([&] { return get(t).index_select(dim, get(index)); });
 }
+mt_tensor mt_gather(mt_tensor t, int64_t dim, mt_tensor index) {
+  return guard_tensor([&] { return get(t).gather(dim, get(index)); });
+}
 mt_tensor mt_narrow(mt_tensor t, int64_t dim, int64_t start, int64_t length) {
   return guard_tensor([&] { return get(t).narrow(dim, start, length); });
 }
@@ -547,6 +550,12 @@ mt_tensor mt_mean_dim(mt_tensor a, int64_t dim, int64_t keepdim) {
 }
 mt_tensor mt_argmax(mt_tensor a, int64_t dim, int64_t keepdim) {
   return guard_tensor([&] { return get(a).argmax(dim, keepdim != 0); });
+}
+mt_tensor mt_topk_indices(mt_tensor a, int64_t k, int64_t dim) {
+  return guard_tensor([&] { return std::get<1>(get(a).topk(k, dim)); });
+}
+mt_tensor mt_bincount(mt_tensor a, int64_t length) {
+  return guard_tensor([&] { return torch::bincount(get(a).flatten(), {}, length); });
 }
 mt_tensor mt_softmax(mt_tensor a, int64_t dim) {
   return guard_tensor([&] { return torch::softmax(get(a), dim); });
@@ -621,6 +630,13 @@ void mt_zero_grad(mt_tensor t) {
   guard_void([&] {
     torch::Tensor g = get(t).grad();
     if (g.defined()) g.zero_();
+  });
+}
+void mt_mul_inplace(mt_tensor t, mt_tensor other) {
+  guard_void([&] {
+    torch::NoGradGuard no_grad;
+    torch::Tensor x = get(t);
+    x.mul_(get(other));
   });
 }
 void mt_add_inplace(mt_tensor t, mt_tensor other, double alpha) {

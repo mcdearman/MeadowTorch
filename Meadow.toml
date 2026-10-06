@@ -1,6 +1,6 @@
 [package]
 name = "Torch"
-version = "0.6.0"
+version = "0.7.0"
 
 # libtorch keeps its grad mode per OS thread, and the shim its scopes and last
 # error. One worker keeps every green thread on one OS thread. A profile is the

@@ -209,6 +209,26 @@ static void test_solve(void) {
   mt_free(a); mt_free(b); mt_free(x);
 }
 
+static void test_lookup(void) {
+  int64_t shape[] = {2, 4}, flat[] = {8};
+  double data[] = {1, 9, 3, 7, 6, 2, 8, 4};
+  mt_tensor t = mt_from_f64(data, 8, shape, 2, MT_FLOAT32, MT_CPU);
+  mt_tensor top = mt_topk_indices(t, 2, 1);
+  int64_t idx[4];
+  CHECK(top && mt_copy_i64(top, idx, 4) == 4 && idx[0] == 1 && idx[1] == 3 && idx[2] == 2 && idx[3] == 0);
+  mt_tensor picked = mt_gather(t, 1, top);
+  double out[4];
+  CHECK(picked && mt_copy_f64(picked, out, 4) == 4 && close_to(out[0], 9.0) && close_to(out[3], 6.0));
+  mt_tensor counts = mt_bincount(top, 5);
+  int64_t c[5];
+  CHECK(counts && mt_copy_i64(counts, c, 5) == 5 && c[0] == 1 && c[1] == 1 && c[2] == 1 && c[3] == 1 && c[4] == 0);
+  mt_tensor two = mt_full(shape, 2, 2.0, MT_FLOAT32, MT_CPU);
+  mt_mul_inplace(t, two);
+  CHECK(mt_copy_f64(t, out, 4) == 4 && close_to(out[0], 2.0) && close_to(out[1], 18.0));
+  (void)flat;
+  mt_free(t); mt_free(top); mt_free(picked); mt_free(counts); mt_free(two);
+}
+
 static void test_weights(void) {
   mt_weights w = mt_weights_open("tests/tiny.safetensors");
   CHECK(w != NULL && mt_weights_count(w) == 3);
@@ -279,6 +299,7 @@ int main(void) {
   test_math();
   mt_scope_exit();
   test_weights();
+  test_lookup();
   test_solve();
   test_mps();
   test_cuda();

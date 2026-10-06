@@ -96,6 +96,9 @@ mt_tensor mt_unsqueeze(mt_tensor t, int64_t dim);
 mt_tensor mt_cat(const mt_tensor *ts, int64_t n, int64_t dim);
 mt_tensor mt_stack(const mt_tensor *ts, int64_t n, int64_t dim);
 mt_tensor mt_index_select(mt_tensor t, int64_t dim, mt_tensor index);
+/* The elements of `t` along `dim` that the int64 tensor `index`, of the same
+ * rank, names. */
+mt_tensor mt_gather(mt_tensor t, int64_t dim, mt_tensor index);
 mt_tensor mt_narrow(mt_tensor t, int64_t dim, int64_t start, int64_t length);
 
 /* --- arithmetic (broadcasting) ---------------------------------------------- */
@@ -130,6 +133,10 @@ mt_tensor mt_mean(mt_tensor a);
 mt_tensor mt_sum_dim(mt_tensor a, int64_t dim, int64_t keepdim);
 mt_tensor mt_mean_dim(mt_tensor a, int64_t dim, int64_t keepdim);
 mt_tensor mt_argmax(mt_tensor a, int64_t dim, int64_t keepdim);
+/* The positions of the `k` largest elements along `dim`, largest first. */
+mt_tensor mt_topk_indices(mt_tensor a, int64_t k, int64_t dim);
+/* How often each value 0 .. length-1 occurs in an int64 tensor of any shape. */
+mt_tensor mt_bincount(mt_tensor a, int64_t length);
 mt_tensor mt_softmax(mt_tensor a, int64_t dim);
 mt_tensor mt_log_softmax(mt_tensor a, int64_t dim);
 
@@ -160,6 +167,8 @@ mt_tensor mt_grad(mt_tensor t);
 void mt_zero_grad(mt_tensor t);
 /* t += alpha * other, in place and outside the graph. */
 void mt_add_inplace(mt_tensor t, mt_tensor other, double alpha);
+/* t *= other, in place and outside the graph. */
+void mt_mul_inplace(mt_tensor t, mt_tensor other);
 
 /* --- optimizers ------------------------------------------------------------- */
 mt_optim mt_sgd(const mt_tensor *params, int64_t n, double lr, double momentum, double weight_decay);

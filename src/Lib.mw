@@ -159,22 +159,22 @@ fun withShim (lib : Library) body =
 def functionNames =
   [
     "mt_abs", "mt_adamw", "mt_add", "mt_add_inplace", "mt_add_scalar", "mt_allclose", "mt_arange",
-    "mt_argmax", "mt_attention", "mt_backward", "mt_cat", "mt_clear_error", "mt_clone",
-    "mt_copy_f64", "mt_copy_i64", "mt_cos", "mt_cross_entropy", "mt_cross_entropy_ignoring",
-    "mt_cuda_available", "mt_detach", "mt_device", "mt_div", "mt_dropout", "mt_dtype",
-    "mt_embedding", "mt_eq", "mt_exp", "mt_free", "mt_from_f64", "mt_from_i64", "mt_full",
-    "mt_gelu", "mt_grad", "mt_index_select", "mt_item_f64", "mt_item_i64", "mt_keep",
-    "mt_last_error", "mt_last_error_len", "mt_layer_norm", "mt_linear", "mt_live_tensors", "mt_log",
-    "mt_log_softmax", "mt_manual_seed", "mt_matmul", "mt_mean", "mt_mean_dim", "mt_mps_allocated",
-    "mt_mps_available", "mt_mse_loss", "mt_mul", "mt_mul_scalar", "mt_narrow", "mt_ndim", "mt_neg",
-    "mt_numel", "mt_ones", "mt_optim_free", "mt_optim_step", "mt_optim_zero_grad", "mt_pow_scalar",
-    "mt_rand", "mt_randn", "mt_relu", "mt_requires_grad", "mt_reshape", "mt_scalar_f64",
-    "mt_scope_enter", "mt_scope_exit", "mt_scope_size", "mt_set_grad_enabled",
-    "mt_set_requires_grad", "mt_sgd", "mt_sigmoid", "mt_sin", "mt_size", "mt_softmax", "mt_solve",
-    "mt_sqrt", "mt_squeeze", "mt_stack", "mt_sub", "mt_sum", "mt_sum_dim", "mt_tanh",
-    "mt_to_device", "mt_to_dtype", "mt_to_string", "mt_transpose", "mt_unsqueeze",
-    "mt_weights_count", "mt_weights_free", "mt_weights_get", "mt_weights_name", "mt_weights_open",
-    "mt_zero_grad", "mt_zeros"
+    "mt_argmax", "mt_attention", "mt_backward", "mt_bincount", "mt_cat", "mt_clear_error",
+    "mt_clone", "mt_copy_f64", "mt_copy_i64", "mt_cos", "mt_cross_entropy",
+    "mt_cross_entropy_ignoring", "mt_cuda_available", "mt_detach", "mt_device", "mt_div",
+    "mt_dropout", "mt_dtype", "mt_embedding", "mt_eq", "mt_exp", "mt_free", "mt_from_f64",
+    "mt_from_i64", "mt_full", "mt_gather", "mt_gelu", "mt_grad", "mt_index_select", "mt_item_f64",
+    "mt_item_i64", "mt_keep", "mt_last_error", "mt_last_error_len", "mt_layer_norm", "mt_linear",
+    "mt_live_tensors", "mt_log", "mt_log_softmax", "mt_manual_seed", "mt_matmul", "mt_mean",
+    "mt_mean_dim", "mt_mps_allocated", "mt_mps_available", "mt_mse_loss", "mt_mul",
+    "mt_mul_inplace", "mt_mul_scalar", "mt_narrow", "mt_ndim", "mt_neg", "mt_numel", "mt_ones",
+    "mt_optim_free", "mt_optim_step", "mt_optim_zero_grad", "mt_pow_scalar", "mt_rand", "mt_randn",
+    "mt_relu", "mt_requires_grad", "mt_reshape", "mt_scalar_f64", "mt_scope_enter", "mt_scope_exit",
+    "mt_scope_size", "mt_set_grad_enabled", "mt_set_requires_grad", "mt_sgd", "mt_sigmoid",
+    "mt_sin", "mt_size", "mt_softmax", "mt_solve", "mt_sqrt", "mt_squeeze", "mt_stack", "mt_sub",
+    "mt_sum", "mt_sum_dim", "mt_tanh", "mt_to_device", "mt_to_dtype", "mt_to_string",
+    "mt_topk_indices", "mt_transpose", "mt_unsqueeze", "mt_weights_count", "mt_weights_free",
+    "mt_weights_get", "mt_weights_name", "mt_weights_open", "mt_zero_grad", "mt_zeros"
   ]
 
 -- --- calling the shim --------------------------------------------------------
@@ -444,6 +444,11 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 @pub fun indexSelect (dim : Int) (index : Tensor) (t : Tensor) =
   tensorCall "mt_index_select" [raw t, int dim, raw index]
 
+-- The elements of `t` along `dim` that the `Int64` tensor `index`, of the same
+-- rank, names.
+@pub fun gather (dim : Int) (index : Tensor) (t : Tensor) =
+  tensorCall "mt_gather" [raw t, int dim, raw index]
+
 -- `length` slices of `t` along `dim`, from `start`.
 @pub fun narrow (dim : Int) (start : Int) (length : Int) (t : Tensor) =
   tensorCall "mt_narrow" [raw t, int dim, int start, int length]
@@ -507,6 +512,13 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 @pub fun meanDim (dim : Int) (a : Tensor) = tensorCall "mt_mean_dim" [raw a, int dim, int 0]
 
 @pub fun argmax (dim : Int) (a : Tensor) = tensorCall "mt_argmax" [raw a, int dim, int 0]
+
+-- The positions of the `k` largest elements along `dim`, largest first.
+@pub fun topkIndices (k : Int) (dim : Int) (a : Tensor) =
+  tensorCall "mt_topk_indices" [raw a, int k, int dim]
+
+-- How often each of 0 .. length-1 occurs in an `Int64` tensor of any shape.
+@pub fun bincount (length : Int) (a : Tensor) = tensorCall "mt_bincount" [raw a, int length]
 
 @pub fun softmax (dim : Int) (a : Tensor) = tensorCall "mt_softmax" [raw a, int dim]
 
@@ -575,6 +587,9 @@ fun listCall (name : String) (ts : [Tensor]) (rest : [Arg]) =
 -- `t += alpha * other`, in place and outside the gradient graph.
 @pub fun addInPlace (alpha : Float) (other : Tensor) (t : Tensor) =
   unitCall "mt_add_inplace" [raw t, raw other, float alpha]
+
+-- `t *= other`, in place and outside the gradient graph.
+@pub fun mulInPlace (other : Tensor) (t : Tensor) = unitCall "mt_mul_inplace" [raw t, raw other]
 
 -- --- optimizers --------------------------------------------------------------
 --
@@ -919,3 +934,21 @@ fun fitLine makeOptimizer (steps : Int) =
        (missing, V.length functionNames > 90)
        (Ok [], True)
        "each name resolves, and the list is the whole header"
+
+@test fun theLargestAreFoundGatheredAndCounted () =
+  let got =
+    torch (\() ->
+      let t = fromFloats [2, 4] [1.0, 9.0, 3.0, 7.0, 6.0, 2.0, 8.0, 4.0] in
+      let top = topkIndices 2 1 t in
+      let doubled = clone t in
+      let _ = mulInPlace (full [2, 4] 2.0) doubled in
+      (
+        toInts top,
+        toFloats (gather 1 top t),
+        toInts (bincount 5 top),
+        toFloats (narrow 1 0 2 doubled)
+      ))
+  in assertEq
+       got
+       (Ok ([1, 3, 2, 0], [9.0, 7.0, 8.0, 6.0], [1, 1, 1, 1, 0], [2.0, 18.0, 12.0, 4.0]))
+       "top two of each row, their values, how often each column was chosen, and a product in place"
